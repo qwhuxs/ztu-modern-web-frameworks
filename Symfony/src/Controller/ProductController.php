@@ -61,6 +61,52 @@ class ProductController extends AbstractController
     }
 
     /**
+     * @param string $id
+     * @param Request $request
+     * @return JsonResponse
+     */
+    #[Route('/products/{id}', name: 'put_product_item', methods: [Request::METHOD_PUT])]
+    public function updateProduct(string $id, Request $request): JsonResponse
+    {
+        $product = $this->getProductItemById(self::PRODUCTS, $id);
+
+        if (!$product) {
+            return new JsonResponse(['data' => ['error' => 'Not found product by id ' . $id]], Response::HTTP_NOT_FOUND);
+        }
+
+        $requestData = json_decode($request->getContent(), true);
+
+        $updatedProductData = [
+            'id' => $product['id'],
+            'name' => $requestData['name'] ?? $product['name'],
+            'description' => $requestData['description'] ?? $product['description'],
+            'price' => $requestData['price'] ?? $product['price']
+        ];
+
+        // TODO update in db
+
+        return new JsonResponse(['data' => $updatedProductData], Response::HTTP_OK);
+    }
+
+    /**
+     * @param string $id
+     * @return JsonResponse
+     */
+    #[Route('/products/{id}', name: 'delete_product_item', methods: [Request::METHOD_DELETE])]
+    public function deleteProduct(string $id): JsonResponse
+    {
+        $product = $this->getProductItemById(self::PRODUCTS, $id);
+
+        if (!$product) {
+            return new JsonResponse(['data' => ['error' => 'Not found product by id ' . $id]], Response::HTTP_NOT_FOUND);
+        }
+
+        // TODO delete from db
+
+        return new JsonResponse(['data' => ['id' => $product['id']], 'message' => 'Product deleted'], Response::HTTP_OK);
+    }
+
+    /**
      * @param array $products
      * @param string $id
      * @return array|null

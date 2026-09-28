@@ -61,6 +61,50 @@ class ProductController extends Controller
     }
 
     /**
+     * @param string $id
+     * @param Request $request
+     * @return mixed
+     */
+    public function updateProduct(string $id, Request $request): mixed
+    {
+        $product = $this->getProductItemById(self::PRODUCTS, $id);
+
+        if (!$product) {
+            return response()->json(['data' => ['error' => 'Not found product by id ' . $id]], Response::HTTP_NOT_FOUND);
+        }
+
+        $requestData = json_decode($request->getContent(), true);
+
+        $updatedProductData = [
+            'id' => $product['id'],
+            'name' => $requestData['name'] ?? $product['name'],
+            'description' => $requestData['description'] ?? $product['description'],
+            'price' => $requestData['price'] ?? $product['price']
+        ];
+
+        // TODO update in db
+
+        return response()->json(['data' => $updatedProductData], Response::HTTP_OK);
+    }
+
+    /**
+     * @param string $id
+     * @return mixed
+     */
+    public function deleteProduct(string $id): mixed
+    {
+        $product = $this->getProductItemById(self::PRODUCTS, $id);
+
+        if (!$product) {
+            return response()->json(['data' => ['error' => 'Not found product by id ' . $id]], Response::HTTP_NOT_FOUND);
+        }
+
+        // TODO delete from db
+
+        return response()->json(['data' => ['id' => $product['id']], 'message' => 'Product deleted'], Response::HTTP_OK);
+    }
+
+    /**
      * @param array $products
      * @param string $id
      * @return array|null

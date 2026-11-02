@@ -1,0 +1,28 @@
+{% extends 'medical/layout.html.twig' %}
+
+{% block title %}Прийоми{% endblock %}
+
+{% block content %}
+    <h1>Прийоми</h1>
+    <a class="btn" href="{{ path('appointment_new') }}">Додати прийом</a>
+
+    <table>
+        <tr><th>Дата і час</th><th>Пацієнт</th><th>Лікар</th><th>Скарги</th><th>Дії</th></tr>
+        {% for appointment in appointments %}
+            <tr>
+                <td>{{ appointment.appointmentAt|date('d.m.Y H:i') }}</td>
+                <td>{{ appointment.patient.lastName }} {{ appointment.patient.firstName }}</td>
+                <td>{{ appointment.doctor.lastName }} {{ appointment.doctor.firstName }}</td>
+                <td>{{ appointment.complaints }}</td>
+                <td class="actions">
+                    <a class="btn" href="{{ path('appointment_edit', {id: appointment.id}) }}">Змінити</a>
+                    <form method="post" action="{{ path('appointment_delete', {id: appointment.id}) }}">
+                        <button class="btn btn-danger" type="submit">Видалити</button>
+                    </form>
+                </td>
+            </tr>
+        {% else %}
+            <tr><td colspan="5">Записів ще немає.</td></tr>
+        {% endfor %}
+    </table>
+{% endblock %}

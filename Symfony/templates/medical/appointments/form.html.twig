@@ -1,0 +1,37 @@
+{% extends 'medical/layout.html.twig' %}
+
+{% block title %}Прийом{% endblock %}
+
+{% block content %}
+    <h1>{{ appointment.id ? 'Редагування' : 'Новий запис' }}: Прийом</h1>
+
+    <form method="post">
+        <label for="patient_id">Пацієнт</label>
+        <select id="patient_id" name="patient_id" required>
+            <option value="">Виберіть пацієнта</option>
+            {% for patient in patients %}
+                <option value="{{ patient.id }}" {% if appointment.patient and appointment.patient.id == patient.id %}selected{% endif %}>
+                    {{ patient.lastName }} {{ patient.firstName }}
+                </option>
+            {% endfor %}
+        </select>
+
+        <label for="doctor_id">Лікар</label>
+        <select id="doctor_id" name="doctor_id" required>
+            <option value="">Виберіть лікаря</option>
+            {% for doctor in doctors %}
+                <option value="{{ doctor.id }}" {% if appointment.doctor and appointment.doctor.id == doctor.id %}selected{% endif %}>
+                    {{ doctor.lastName }} {{ doctor.firstName }}, {{ doctor.specialty }}
+                </option>
+            {% endfor %}
+        </select>
+
+        <label for="appointment_at">Дата і час</label>
+        <input id="appointment_at" type="datetime-local" name="appointment_at" required value="{{ appointment.appointmentAt ? appointment.appointmentAt|date('Y-m-d\\TH:i') }}">
+
+        <label for="complaints">Скарги</label>
+        <textarea id="complaints" name="complaints" rows="3">{{ appointment.complaints }}</textarea>
+
+        <p><button class="btn" type="submit">Зберегти</button></p>
+    </form>
+{% endblock %}

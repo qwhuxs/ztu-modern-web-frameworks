@@ -1,0 +1,27 @@
+{% extends 'medical/layout.html.twig' %}
+
+{% block title %}Діагноз{% endblock %}
+
+{% block content %}
+    <h1>{{ diagnosis.id ? 'Редагування' : 'Новий запис' }}: Діагноз</h1>
+
+    <form method="post">
+        <label for="appointment_id">Прийом</label>
+        <select id="appointment_id" name="appointment_id" required>
+            <option value="">Виберіть прийом</option>
+            {% for appointment in appointments %}
+                <option value="{{ appointment.id }}" {% if diagnosis.appointment and diagnosis.appointment.id == appointment.id %}selected{% endif %}>
+                    {{ appointment.appointmentAt|date('d.m.Y H:i') }}, пацієнт: {{ appointment.patient.lastName }}, лікар: {{ appointment.doctor.lastName }}
+                </option>
+            {% endfor %}
+        </select>
+
+        <label for="name">Назва діагнозу</label>
+        <input id="name" name="name" maxlength="150" required value="{{ diagnosis.name }}">
+
+        <label for="description">Опис</label>
+        <textarea id="description" name="description" rows="3">{{ diagnosis.description }}</textarea>
+
+        <p><button class="btn" type="submit">Зберегти</button></p>
+    </form>
+{% endblock %}

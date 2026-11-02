@@ -14,3 +14,5 @@ Route::get('/test/hello', [TestController::class, 'hello']);
 Route::get('/products', [ProductController::class, 'getProducts']);
 Route::get('/products/{id}', [ProductController::class, 'getProductItem']);
 Route::post('/products', [ProductController::class, 'createProduct']);
+
+require __DIR__.'/medical.php';

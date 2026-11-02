@@ -1,0 +1,27 @@
+{% extends 'medical/layout.html.twig' %}
+
+{% block title %}Пацієнти{% endblock %}
+
+{% block content %}
+    <h1>Пацієнти</h1>
+    <a class="btn" href="{{ path('patient_new') }}">Додати пацієнта</a>
+
+    <table>
+        <tr><th>Прізвище та ім'я</th><th>Дата народження</th><th>Телефон</th><th>Дії</th></tr>
+        {% for patient in patients %}
+            <tr>
+                <td>{{ patient.lastName }} {{ patient.firstName }}</td>
+                <td>{{ patient.birthDate|date('d.m.Y') }}</td>
+                <td>{{ patient.phone }}</td>
+                <td class="actions">
+                    <a class="btn" href="{{ path('patient_edit', {id: patient.id}) }}">Змінити</a>
+                    <form method="post" action="{{ path('patient_delete', {id: patient.id}) }}">
+                        <button class="btn btn-danger" type="submit">Видалити</button>
+                    </form>
+                </td>
+            </tr>
+        {% else %}
+            <tr><td colspan="4">Записів ще немає.</td></tr>
+        {% endfor %}
+    </table>
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends 'medical/layout.html.twig' %}
+
+{% block title %}Лікар{% endblock %}
+
+{% block content %}
+    <h1>{{ doctor.id ? 'Редагування' : 'Новий запис' }}: Лікар</h1>
+
+    <form method="post">
+        <label for="last_name">Прізвище</label>
+        <input id="last_name" name="last_name" maxlength="100" required value="{{ doctor.lastName }}">
+
+        <label for="first_name">Ім'я</label>
+        <input id="first_name" name="first_name" maxlength="100" required value="{{ doctor.firstName }}">
+
+        <label for="specialty">Спеціальність</label>
+        <input id="specialty" name="specialty" maxlength="100" required value="{{ doctor.specialty }}">
+
+        <label for="phone">Телефон</label>
+        <input id="phone" name="phone" maxlength="20" required value="{{ doctor.phone }}">
+
+        <p><button class="btn" type="submit">Зберегти</button></p>
+    </form>
+{% endblock %}

@@ -6,10 +6,36 @@
     <h1>Діагнози</h1>
     <a class="btn" href="{{ path('diagnosis_new') }}">Додати діагноз</a>
 
+    <form method="get" class="filters">
+        <div>
+            <label for="id">ID</label>
+            <input id="id" type="number" min="1" name="id" value="{{ app.request.query.get('id') }}">
+        </div>
+        <div>
+            <label for="appointment_id">Прийом</label>
+            <select id="appointment_id" name="appointment_id">
+                <option value="">Усі</option>
+                {% for appointment in appointments %}
+                    <option value="{{ appointment.id }}" {% if app.request.query.get('appointment_id') == appointment.id %}selected{% endif %}>{{ appointment.appointmentAt|date('d.m.Y H:i') }}, {{ appointment.patient.lastName }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="name">Назва</label>
+            <input id="name" name="name" value="{{ app.request.query.get('name') }}">
+        </div>
+        <div>
+            <label for="description">Опис</label>
+            <input id="description" name="description" value="{{ app.request.query.get('description') }}">
+        </div>
+        {% include 'medical/_filter_actions.html.twig' %}
+    </form>
+
     <table>
-        <tr><th>Назва</th><th>Опис</th><th>Прийом</th><th>Дії</th></tr>
-        {% for diagnosis in diagnoses %}
+        <tr><th>ID</th><th>Назва</th><th>Опис</th><th>Прийом</th><th>Дії</th></tr>
+        {% for diagnosis in pagination.items %}
             <tr>
+                <td>{{ diagnosis.id }}</td>
                 <td>{{ diagnosis.name }}</td>
                 <td>{{ diagnosis.description }}</td>
                 <td>{{ diagnosis.appointment.appointmentAt|date('d.m.Y H:i') }}, {{ diagnosis.appointment.patient.lastName }}</td>
@@ -21,7 +47,9 @@
                 </td>
             </tr>
         {% else %}
-            <tr><td colspan="4">Записів ще немає.</td></tr>
+            <tr><td colspan="5">Записів не знайдено.</td></tr>
         {% endfor %}
     </table>
+
+    {% include 'medical/_pagination.html.twig' %}
 {% endblock %}

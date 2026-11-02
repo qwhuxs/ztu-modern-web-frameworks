@@ -1,0 +1,10 @@
+<div class="pagination">
+    <span>Усього записів: {{ pagination.total }}</span>
+    {% for number in 1..pagination.pages %}
+        {% if number == pagination.page %}
+            <span class="current">{{ number }}</span>
+        {% else %}
+            <a href="{{ path(app.request.attributes.get('_route'), app.request.query.all|merge({page: number})) }}">{{ number }}</a>
+        {% endif %}
+    {% endfor %}
+</div>

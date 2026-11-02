@@ -6,10 +6,36 @@
     <h1>Лікарі</h1>
     <a class="btn" href="{{ route('doctors.create') }}">Додати лікаря</a>
 
+    <form method="GET" class="filters">
+        <div>
+            <label for="id">ID</label>
+            <input id="id" type="number" min="1" name="id" value="{{ request('id') }}">
+        </div>
+        <div>
+            <label for="last_name">Прізвище</label>
+            <input id="last_name" name="last_name" value="{{ request('last_name') }}">
+        </div>
+        <div>
+            <label for="first_name">Ім'я</label>
+            <input id="first_name" name="first_name" value="{{ request('first_name') }}">
+        </div>
+        <div>
+            <label for="specialty">Спеціальність</label>
+            <input id="specialty" name="specialty" value="{{ request('specialty') }}">
+        </div>
+        <div>
+            <label for="phone">Телефон</label>
+            <input id="phone" name="phone" value="{{ request('phone') }}">
+        </div>
+        @include('medical._timestamps_filters')
+        @include('medical._filter_actions')
+    </form>
+
     <table>
-        <tr><th>Прізвище та ім'я</th><th>Спеціальність</th><th>Телефон</th><th>Дії</th></tr>
+        <tr><th>ID</th><th>Прізвище та ім'я</th><th>Спеціальність</th><th>Телефон</th><th>Дії</th></tr>
         @forelse ($doctors as $doctor)
             <tr>
+                <td>{{ $doctor->id }}</td>
                 <td>{{ $doctor->last_name }} {{ $doctor->first_name }}</td>
                 <td>{{ $doctor->specialty }}</td>
                 <td>{{ $doctor->phone }}</td>
@@ -23,7 +49,9 @@
                 </td>
             </tr>
         @empty
-            <tr><td colspan="4">Записів ще немає.</td></tr>
+            <tr><td colspan="5">Записів не знайдено.</td></tr>
         @endforelse
     </table>
+
+    @include('medical._pagination', ['items' => $doctors])
 @endsection

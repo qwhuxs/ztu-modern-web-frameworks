@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\FiltersRecords;
 use App\Models\Diagnosis;
 use App\Models\Treatment;
 use Illuminate\Database\QueryException;
@@ -9,14 +10,32 @@ use Illuminate\Http\Request;
 
 class TreatmentController extends Controller
 {
+    use FiltersRecords;
+
     /**
-     * Показує список записів про лікування.
+     * Показує список записів про лікування із фільтрами та пагінацією.
      *
+     * @param Request $request Поточний запит
      * @return \Illuminate\Contracts\View\View
      */
-    public function index()
+    public function index(Request $request)
     {
-        return view('medical.treatments.index', ['treatments' => Treatment::with('diagnosis.appointment.patient')->latest()->get()]);
+        $query = Treatment::with('diagnosis.appointment.patient')->latest();
+
+        $this->applyFilters($query, $request, [
+            'id' => 'exact',
+            'diagnosis_id' => 'exact',
+            'prescription' => 'text',
+            'start_date' => 'date',
+            'end_date' => 'date',
+            'created_at' => 'date',
+            'updated_at' => 'date',
+        ]);
+
+        return view('medical.treatments.index', [
+            'treatments' => $query->paginate($this->itemsPerPage($request))->withQueryString(),
+            'diagnoses' => Diagnosis::with('appointment.patient')->latest()->get(),
+        ]);
     }
 
     /**
@@ -26,7 +45,10 @@ class TreatmentController extends Controller
      */
     public function create()
     {
-        return view('medical.treatments.form', ['treatment' => new Treatment(), 'diagnoses' => Diagnosis::with('appointment.patient')->latest()->get()]);
+        return view('medical.treatments.form', [
+            'treatment' => new Treatment(),
+            'diagnoses' => Diagnosis::with('appointment.patient')->latest()->get(),
+        ]);
     }
 
     /**
@@ -50,7 +72,10 @@ class TreatmentController extends Controller
      */
     public function edit(Treatment $treatment)
     {
-        return view('medical.treatments.form', ['treatment' => $treatment, 'diagnoses' => Diagnosis::with('appointment.patient')->latest()->get()]);
+        return view('medical.treatments.form', [
+            'treatment' => $treatment,
+            'diagnoses' => Diagnosis::with('appointment.patient')->latest()->get(),
+        ]);
     }
 
     /**

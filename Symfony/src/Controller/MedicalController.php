@@ -5,6 +5,7 @@ namespace App\Controller;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use App\Filter\FiltersRecords;
 
 class MedicalController extends AbstractController
 {
@@ -18,4 +19,6 @@ class MedicalController extends AbstractController
     {
         return $this->render('medical/home.html.twig');
     }
+
+       use FiltersRecords;
 }

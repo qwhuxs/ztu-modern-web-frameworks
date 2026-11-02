@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\FiltersRecords;
 use App\Models\Appointment;
 use App\Models\Diagnosis;
 use Illuminate\Database\QueryException;
@@ -9,14 +10,31 @@ use Illuminate\Http\Request;
 
 class DiagnosisController extends Controller
 {
+    use FiltersRecords;
+
     /**
-     * Показує список діагнозів.
+     * Показує список діагнозів із фільтрами та пагінацією.
      *
+     * @param Request $request Поточний запит
      * @return \Illuminate\Contracts\View\View
      */
-    public function index()
+    public function index(Request $request)
     {
-        return view('medical.diagnoses.index', ['diagnoses' => Diagnosis::with('appointment.patient')->latest()->get()]);
+        $query = Diagnosis::with('appointment.patient')->latest();
+
+        $this->applyFilters($query, $request, [
+            'id' => 'exact',
+            'appointment_id' => 'exact',
+            'name' => 'text',
+            'description' => 'text',
+            'created_at' => 'date',
+            'updated_at' => 'date',
+        ]);
+
+        return view('medical.diagnoses.index', [
+            'diagnoses' => $query->paginate($this->itemsPerPage($request))->withQueryString(),
+            'appointments' => Appointment::with(['patient', 'doctor'])->latest('appointment_at')->get(),
+        ]);
     }
 
     /**
@@ -26,7 +44,10 @@ class DiagnosisController extends Controller
      */
     public function create()
     {
-        return view('medical.diagnoses.form', ['diagnosis' => new Diagnosis(), 'appointments' => Appointment::with(['patient', 'doctor'])->latest('appointment_at')->get()]);
+        return view('medical.diagnoses.form', [
+            'diagnosis' => new Diagnosis(),
+            'appointments' => Appointment::with(['patient', 'doctor'])->latest('appointment_at')->get(),
+        ]);
     }
 
     /**
@@ -50,7 +71,10 @@ class DiagnosisController extends Controller
      */
     public function edit(Diagnosis $diagnosis)
     {
-        return view('medical.diagnoses.form', ['diagnosis' => $diagnosis, 'appointments' => Appointment::with(['patient', 'doctor'])->latest('appointment_at')->get()]);
+        return view('medical.diagnoses.form', [
+            'diagnosis' => $diagnosis,
+            'appointments' => Appointment::with(['patient', 'doctor'])->latest('appointment_at')->get(),
+        ]);
     }
 
     /**

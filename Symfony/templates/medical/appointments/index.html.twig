@@ -6,10 +6,45 @@
     <h1>Прийоми</h1>
     <a class="btn" href="{{ path('appointment_new') }}">Додати прийом</a>
 
+    <form method="get" class="filters">
+        <div>
+            <label for="id">ID</label>
+            <input id="id" type="number" min="1" name="id" value="{{ app.request.query.get('id') }}">
+        </div>
+        <div>
+            <label for="patient_id">Пацієнт</label>
+            <select id="patient_id" name="patient_id">
+                <option value="">Усі</option>
+                {% for patient in patients %}
+                    <option value="{{ patient.id }}" {% if app.request.query.get('patient_id') == patient.id %}selected{% endif %}>{{ patient.lastName }} {{ patient.firstName }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="doctor_id">Лікар</label>
+            <select id="doctor_id" name="doctor_id">
+                <option value="">Усі</option>
+                {% for doctor in doctors %}
+                    <option value="{{ doctor.id }}" {% if app.request.query.get('doctor_id') == doctor.id %}selected{% endif %}>{{ doctor.lastName }} {{ doctor.firstName }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="appointment_at">Дата прийому</label>
+            <input id="appointment_at" type="date" name="appointment_at" value="{{ app.request.query.get('appointment_at') }}">
+        </div>
+        <div>
+            <label for="complaints">Скарги</label>
+            <input id="complaints" name="complaints" value="{{ app.request.query.get('complaints') }}">
+        </div>
+        {% include 'medical/_filter_actions.html.twig' %}
+    </form>
+
     <table>
-        <tr><th>Дата і час</th><th>Пацієнт</th><th>Лікар</th><th>Скарги</th><th>Дії</th></tr>
-        {% for appointment in appointments %}
+        <tr><th>ID</th><th>Дата і час</th><th>Пацієнт</th><th>Лікар</th><th>Скарги</th><th>Дії</th></tr>
+        {% for appointment in pagination.items %}
             <tr>
+                <td>{{ appointment.id }}</td>
                 <td>{{ appointment.appointmentAt|date('d.m.Y H:i') }}</td>
                 <td>{{ appointment.patient.lastName }} {{ appointment.patient.firstName }}</td>
                 <td>{{ appointment.doctor.lastName }} {{ appointment.doctor.firstName }}</td>
@@ -22,7 +57,9 @@
                 </td>
             </tr>
         {% else %}
-            <tr><td colspan="5">Записів ще немає.</td></tr>
+            <tr><td colspan="6">Записів не знайдено.</td></tr>
         {% endfor %}
     </table>
+
+    {% include 'medical/_pagination.html.twig' %}
 {% endblock %}

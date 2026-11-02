@@ -2,20 +2,38 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\FiltersRecords;
 use App\Models\Doctor;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 
 class DoctorController extends Controller
 {
+    use FiltersRecords;
+
     /**
-     * Показує список лікарів.
+     * Показує список лікарів із фільтрами та пагінацією.
      *
+     * @param Request $request Поточний запит
      * @return \Illuminate\Contracts\View\View
      */
-    public function index()
+    public function index(Request $request)
     {
-        return view('medical.doctors.index', ['doctors' => Doctor::orderBy('last_name')->get()]);
+        $query = Doctor::query()->orderBy('last_name');
+
+        $this->applyFilters($query, $request, [
+            'id' => 'exact',
+            'first_name' => 'text',
+            'last_name' => 'text',
+            'specialty' => 'text',
+            'phone' => 'text',
+            'created_at' => 'date',
+            'updated_at' => 'date',
+        ]);
+
+        return view('medical.doctors.index', [
+            'doctors' => $query->paginate($this->itemsPerPage($request))->withQueryString(),
+        ]);
     }
 
     /**

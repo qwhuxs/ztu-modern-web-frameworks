@@ -6,10 +6,35 @@
     <h1>Пацієнти</h1>
     <a class="btn" href="{{ path('patient_new') }}">Додати пацієнта</a>
 
+    <form method="get" class="filters">
+        <div>
+            <label for="id">ID</label>
+            <input id="id" type="number" min="1" name="id" value="{{ app.request.query.get('id') }}">
+        </div>
+        <div>
+            <label for="last_name">Прізвище</label>
+            <input id="last_name" name="last_name" value="{{ app.request.query.get('last_name') }}">
+        </div>
+        <div>
+            <label for="first_name">Ім'я</label>
+            <input id="first_name" name="first_name" value="{{ app.request.query.get('first_name') }}">
+        </div>
+        <div>
+            <label for="birth_date">Дата народження</label>
+            <input id="birth_date" type="date" name="birth_date" value="{{ app.request.query.get('birth_date') }}">
+        </div>
+        <div>
+            <label for="phone">Телефон</label>
+            <input id="phone" name="phone" value="{{ app.request.query.get('phone') }}">
+        </div>
+        {% include 'medical/_filter_actions.html.twig' %}
+    </form>
+
     <table>
-        <tr><th>Прізвище та ім'я</th><th>Дата народження</th><th>Телефон</th><th>Дії</th></tr>
-        {% for patient in patients %}
+        <tr><th>ID</th><th>Прізвище та ім'я</th><th>Дата народження</th><th>Телефон</th><th>Дії</th></tr>
+        {% for patient in pagination.items %}
             <tr>
+                <td>{{ patient.id }}</td>
                 <td>{{ patient.lastName }} {{ patient.firstName }}</td>
                 <td>{{ patient.birthDate|date('d.m.Y') }}</td>
                 <td>{{ patient.phone }}</td>
@@ -21,7 +46,9 @@
                 </td>
             </tr>
         {% else %}
-            <tr><td colspan="4">Записів ще немає.</td></tr>
+            <tr><td colspan="5">Записів не знайдено.</td></tr>
         {% endfor %}
     </table>
+
+    {% include 'medical/_pagination.html.twig' %}
 {% endblock %}

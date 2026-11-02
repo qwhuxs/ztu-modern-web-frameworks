@@ -1,0 +1,12 @@
+<div>
+    <label for="itemsPerPage">Записів на сторінці</label>
+    <select id="itemsPerPage" name="itemsPerPage" onchange="this.form.submit()">
+        {% for option in [5, 10, 20, 50] %}
+            <option value="{{ option }}" {% if pagination.itemsPerPage == option %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+    </select>
+</div>
+<div class="filter-actions">
+    <button class="btn" type="submit">Знайти</button>
+    <a class="btn" href="{{ path(app.request.attributes.get('_route')) }}">Скинути</a>
+</div>

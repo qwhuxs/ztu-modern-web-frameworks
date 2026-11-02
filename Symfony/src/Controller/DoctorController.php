@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\Entity\Doctor;
+use App\Filter\FiltersRecords;
 use Doctrine\DBAL\Exception\ForeignKeyConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -13,6 +14,8 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/doctors')]
 class DoctorController extends AbstractController
 {
+    use FiltersRecords;
+
     /**
      * Отримує менеджер сутностей для роботи з базою.
      *
@@ -23,15 +26,29 @@ class DoctorController extends AbstractController
     }
 
     /**
-     * Показує список лікарів.
+     * Показує список лікарів із фільтрами та пагінацією.
      *
+     * @param Request $request Поточний запит
      * @return Response
      */
     #[Route('', name: 'doctor_index', methods: ['GET'])]
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        $qb = $this->em->createQueryBuilder()
+            ->select('r')
+            ->from(Doctor::class, 'r')
+            ->orderBy('r.lastName', 'ASC');
+
+        $this->applyFilters($qb, $request, [
+            'id' => ['r.id', 'exact'],
+            'first_name' => ['r.firstName', 'text'],
+            'last_name' => ['r.lastName', 'text'],
+            'specialty' => ['r.specialty', 'text'],
+            'phone' => ['r.phone', 'text'],
+        ]);
+
         return $this->render('medical/doctors/index.html.twig', [
-            'doctors' => $this->em->getRepository(Doctor::class)->findBy([], ['lastName' => 'ASC']),
+            'pagination' => $this->paginate($qb, $request),
         ]);
     }
 

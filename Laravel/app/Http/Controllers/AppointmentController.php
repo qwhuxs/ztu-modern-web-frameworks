@@ -2,22 +2,42 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\FiltersRecords;
+use App\Models\Appointment;
 use App\Models\Doctor;
 use App\Models\Patient;
-use App\Models\Appointment;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 
 class AppointmentController extends Controller
 {
+    use FiltersRecords;
+
     /**
-     * Показує список прийомів.
+     * Показує список прийомів із фільтрами та пагінацією.
      *
+     * @param Request $request Поточний запит
      * @return \Illuminate\Contracts\View\View
      */
-    public function index()
+    public function index(Request $request)
     {
-        return view('medical.appointments.index', ['appointments' => Appointment::with(['patient', 'doctor'])->latest('appointment_at')->get()]);
+        $query = Appointment::with(['patient', 'doctor'])->latest('appointment_at');
+
+        $this->applyFilters($query, $request, [
+            'id' => 'exact',
+            'patient_id' => 'exact',
+            'doctor_id' => 'exact',
+            'appointment_at' => 'date',
+            'complaints' => 'text',
+            'created_at' => 'date',
+            'updated_at' => 'date',
+        ]);
+
+        return view('medical.appointments.index', [
+            'appointments' => $query->paginate($this->itemsPerPage($request))->withQueryString(),
+            'patients' => Patient::orderBy('last_name')->get(),
+            'doctors' => Doctor::orderBy('last_name')->get(),
+        ]);
     }
 
     /**
@@ -27,7 +47,11 @@ class AppointmentController extends Controller
      */
     public function create()
     {
-        return view('medical.appointments.form', ['appointment' => new Appointment(), 'patients' => Patient::orderBy('last_name')->get(), 'doctors' => Doctor::orderBy('last_name')->get()]);
+        return view('medical.appointments.form', [
+            'appointment' => new Appointment(),
+            'patients' => Patient::orderBy('last_name')->get(),
+            'doctors' => Doctor::orderBy('last_name')->get(),
+        ]);
     }
 
     /**
@@ -51,7 +75,11 @@ class AppointmentController extends Controller
      */
     public function edit(Appointment $appointment)
     {
-        return view('medical.appointments.form', ['appointment' => $appointment, 'patients' => Patient::orderBy('last_name')->get(), 'doctors' => Doctor::orderBy('last_name')->get()]);
+        return view('medical.appointments.form', [
+            'appointment' => $appointment,
+            'patients' => Patient::orderBy('last_name')->get(),
+            'doctors' => Doctor::orderBy('last_name')->get(),
+        ]);
     }
 
     /**

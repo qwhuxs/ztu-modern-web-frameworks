@@ -17,6 +17,14 @@
         .btn-danger { background: #b42318; }
         .actions { display: flex; gap: 8px; }
         .error { background: #fee4e2; color: #912018; padding: 10px 14px; border-radius: 4px; margin: 12px 0; }
+        .filters { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; align-items: end; margin: 16px 0; padding: 14px; background: #f4f6f8; border-radius: 6px; }
+        .filters label { margin-top: 0; }
+        .filters input, .filters select { max-width: none; }
+        .filter-actions { display: flex; gap: 8px; }
+        .pagination { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 16px; }
+        .pagination a, .pagination .current { padding: 6px 10px; border-radius: 4px; text-decoration: none; }
+        .pagination a { background: #e4e7eb; color: #1f2933; }
+        .pagination .current { background: #1d4ed8; color: #fff; }
     </style>
 </head>
 <body>

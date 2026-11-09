@@ -4,7 +4,9 @@
 
 @section('content')
     <h1>Прийоми</h1>
-    <a class="btn" href="{{ route('appointments.create') }}">Додати прийом</a>
+    @if (auth()->user()?->hasRole('manager'))
+        <a class="btn" href="{{ route('appointments.create') }}">Додати прийом</a>
+    @endif
 
     <form method="GET" class="filters">
         <div>
@@ -51,12 +53,16 @@
                 <td>{{ $appointment->doctor->last_name }} {{ $appointment->doctor->first_name }}</td>
                 <td>{{ $appointment->complaints }}</td>
                 <td class="actions">
-                    <a class="btn" href="{{ route('appointments.edit', $appointment) }}">Змінити</a>
-                    <form method="POST" action="{{ route('appointments.destroy', $appointment) }}">
-                        @csrf
-                        @method('DELETE')
-                        <button class="btn btn-danger" type="submit">Видалити</button>
-                    </form>
+                    @if (auth()->user()->hasRole('manager'))
+                        <a class="btn" href="{{ route('appointments.edit', $appointment) }}">Змінити</a>
+                    @endif
+                    @if (auth()->user()->hasRole('admin'))
+                        <form method="POST" action="{{ route('appointments.destroy', $appointment) }}">
+                            @csrf
+                            @method('DELETE')
+                            <button class="btn btn-danger" type="submit">Видалити</button>
+                        </form>
+                    @endif
                 </td>
             </tr>
         @empty

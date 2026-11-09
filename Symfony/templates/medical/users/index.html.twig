@@ -1,0 +1,37 @@
+{% extends 'medical/layout.html.twig' %}
+
+{% block title %}Користувачі{% endblock %}
+
+{% block content %}
+    {% set current_user = app.request.attributes.get('user') %}
+    <h1>Користувачі</h1>
+
+    {% if app.request.query.get('error') == 'self' %}
+        <div class="error">Не можна змінити власну роль.</div>
+    {% endif %}
+
+    <table>
+        <tr><th>ID</th><th>Ім'я</th><th>Пошта</th><th>Роль</th></tr>
+        {% for user in users %}
+            <tr>
+                <td>{{ user.id }}</td>
+                <td>{{ user.name }}</td>
+                <td>{{ user.email }}</td>
+                <td>
+                    {% if user.id == current_user.id %}
+                        {{ user.role }} (це ви)
+                    {% else %}
+                        <form method="post" action="{{ path('user_role', {id: user.id}) }}" class="actions">
+                            <select name="role">
+                                {% for role in roles %}
+                                    <option value="{{ role }}" {% if user.role == role %}selected{% endif %}>{{ role }}</option>
+                                {% endfor %}
+                            </select>
+                            <button class="btn" type="submit">Зберегти</button>
+                        </form>
+                    {% endif %}
+                </td>
+            </tr>
+        {% endfor %}
+    </table>
+{% endblock %}

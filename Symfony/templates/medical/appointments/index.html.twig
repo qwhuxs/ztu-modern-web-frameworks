@@ -3,8 +3,11 @@
 {% block title %}Прийоми{% endblock %}
 
 {% block content %}
+    {% set user = app.request.attributes.get('user') %}
     <h1>Прийоми</h1>
-    <a class="btn" href="{{ path('appointment_new') }}">Додати прийом</a>
+    {% if user.hasRole('manager') %}
+        <a class="btn" href="{{ path('appointment_new') }}">Додати прийом</a>
+    {% endif %}
 
     <form method="get" class="filters">
         <div>
@@ -50,10 +53,14 @@
                 <td>{{ appointment.doctor.lastName }} {{ appointment.doctor.firstName }}</td>
                 <td>{{ appointment.complaints }}</td>
                 <td class="actions">
-                    <a class="btn" href="{{ path('appointment_edit', {id: appointment.id}) }}">Змінити</a>
-                    <form method="post" action="{{ path('appointment_delete', {id: appointment.id}) }}">
-                        <button class="btn btn-danger" type="submit">Видалити</button>
-                    </form>
+                    {% if user.hasRole('manager') %}
+                        <a class="btn" href="{{ path('appointment_edit', {id: appointment.id}) }}">Змінити</a>
+                    {% endif %}
+                    {% if user.hasRole('admin') %}
+                        <form method="post" action="{{ path('appointment_delete', {id: appointment.id}) }}">
+                            <button class="btn btn-danger" type="submit">Видалити</button>
+                        </form>
+                    {% endif %}
                 </td>
             </tr>
         {% else %}

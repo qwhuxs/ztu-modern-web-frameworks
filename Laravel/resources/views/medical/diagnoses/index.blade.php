@@ -4,7 +4,9 @@
 
 @section('content')
     <h1>Діагнози</h1>
-    <a class="btn" href="{{ route('diagnoses.create') }}">Додати діагноз</a>
+    @if (auth()->user()?->hasRole('manager'))
+        <a class="btn" href="{{ route('diagnoses.create') }}">Додати діагноз</a>
+    @endif
 
     <form method="GET" class="filters">
         <div>
@@ -41,12 +43,16 @@
                 <td>{{ $diagnosis->description }}</td>
                 <td>{{ $diagnosis->appointment->appointment_at->format('d.m.Y H:i') }}, {{ $diagnosis->appointment->patient->last_name }}</td>
                 <td class="actions">
-                    <a class="btn" href="{{ route('diagnoses.edit', $diagnosis) }}">Змінити</a>
-                    <form method="POST" action="{{ route('diagnoses.destroy', $diagnosis) }}">
-                        @csrf
-                        @method('DELETE')
-                        <button class="btn btn-danger" type="submit">Видалити</button>
-                    </form>
+                    @if (auth()->user()->hasRole('manager'))
+                        <a class="btn" href="{{ route('diagnoses.edit', $diagnosis) }}">Змінити</a>
+                    @endif
+                    @if (auth()->user()->hasRole('admin'))
+                        <form method="POST" action="{{ route('diagnoses.destroy', $diagnosis) }}">
+                            @csrf
+                            @method('DELETE')
+                            <button class="btn btn-danger" type="submit">Видалити</button>
+                        </form>
+                    @endif
                 </td>
             </tr>
         @empty

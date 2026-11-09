@@ -25,6 +25,8 @@
         .pagination a, .pagination .current { padding: 6px 10px; border-radius: 4px; text-decoration: none; }
         .pagination a { background: #e4e7eb; color: #1f2933; }
         .pagination .current { background: #1d4ed8; color: #fff; }
+        .user-box { margin-left: auto; display: flex; gap: 12px; align-items: center; color: #fff; }
+        .btn-light { background: #fff; color: #1f2933; }
     </style>
 </head>
 <body>
@@ -35,9 +37,24 @@
         <a href="{{ path('appointment_index') }}">Прийоми</a>
         <a href="{{ path('diagnosis_index') }}">Діагнози</a>
         <a href="{{ path('treatment_index') }}">Лікування</a>
+        {% set current_user = app.request.attributes.get('user') %}
+        {% if current_user and current_user.hasRole('admin') %}
+            <a href="{{ path('user_index') }}">Користувачі</a>
+        {% endif %}
+        <span class="user-box">
+            {% if current_user %}
+                {{ current_user.name }} ({{ current_user.role }})
+                <form method="post" action="{{ path('logout') }}">
+                    <button class="btn btn-light" type="submit">Вийти</button>
+                </form>
+            {% else %}
+                <a href="{{ path('login') }}">Увійти</a>
+                <a href="{{ path('register') }}">Реєстрація</a>
+            {% endif %}
+        </span>
     </nav>
     <main>
-        {% if app.request.query.get('error') %}
+        {% if app.request.query.get('error') == '1' %}
             <div class="error">Запис не можна видалити, бо з ним пов'язані інші записи.</div>
         {% endif %}
         {% for error in errors|default([]) %}

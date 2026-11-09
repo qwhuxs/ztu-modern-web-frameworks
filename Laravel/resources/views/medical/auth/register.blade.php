@@ -1,0 +1,26 @@
+@extends('medical.layout')
+
+@section('title', 'Реєстрація')
+
+@section('content')
+    <h1>Реєстрація</h1>
+    <p>Новий користувач отримує роль Client. Змінити роль може Admin.</p>
+
+    <form method="POST" action="{{ route('register') }}">
+        @csrf
+
+        <label for="name">Ім'я</label>
+        <input id="name" name="name" maxlength="100" required value="{{ old('name') }}">
+
+        <label for="email">Пошта</label>
+        <input id="email" type="email" name="email" maxlength="150" required value="{{ old('email') }}">
+
+        <label for="password">Пароль (щонайменше 8 символів)</label>
+        <input id="password" type="password" name="password" minlength="8" required>
+
+        <label for="password_confirmation">Повторіть пароль</label>
+        <input id="password_confirmation" type="password" name="password_confirmation" minlength="8" required>
+
+        <p><button class="btn" type="submit">Зареєструватися</button></p>
+    </form>
+@endsection

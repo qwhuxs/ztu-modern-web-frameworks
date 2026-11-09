@@ -25,6 +25,8 @@
         .pagination a, .pagination .current { padding: 6px 10px; border-radius: 4px; text-decoration: none; }
         .pagination a { background: #e4e7eb; color: #1f2933; }
         .pagination .current { background: #0f766e; color: #fff; }
+        .user-box { margin-left: auto; display: flex; gap: 12px; align-items: center; color: #fff; }
+        .btn-light { background: #fff; color: #1f2933; }
     </style>
 </head>
 <body>
@@ -35,6 +37,21 @@
         <a href="{{ route('appointments.index') }}">Прийоми</a>
         <a href="{{ route('diagnoses.index') }}">Діагнози</a>
         <a href="{{ route('treatments.index') }}">Лікування</a>
+        @if (auth()->user()?->hasRole('admin'))
+            <a href="{{ route('users.index') }}">Користувачі</a>
+        @endif
+        <span class="user-box">
+            @auth
+                {{ auth()->user()->name }} ({{ auth()->user()->role }})
+                <form method="POST" action="{{ route('logout') }}">
+                    @csrf
+                    <button class="btn btn-light" type="submit">Вийти</button>
+                </form>
+            @else
+                <a href="{{ route('login') }}">Увійти</a>
+                <a href="{{ route('register') }}">Реєстрація</a>
+            @endauth
+        </span>
     </nav>
     <main>
         @if (session('error'))

@@ -5,6 +5,7 @@ namespace App\Controller;
 use App\Entity\Appointment;
 use App\Entity\Diagnosis;
 use App\Filter\FiltersRecords;
+use App\Security\RequireRole;
 use Doctrine\DBAL\Exception\ForeignKeyConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -12,6 +13,8 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
+// Доступ: client переглядає, manager додає та змінює, admin видаляє.
+#[RequireRole('client')]
 #[Route('/diagnoses')]
 class DiagnosisController extends AbstractController
 {
@@ -54,11 +57,12 @@ class DiagnosisController extends AbstractController
     }
 
     /**
-     * Показує порожню форму та зберігає новий запис: діагноз.
+     * Показує порожню форму та зберігає новий діагноз.
      *
      * @param Request $request Поточний запит
      * @return Response
      */
+    #[RequireRole('manager')]
     #[Route('/new', name: 'diagnosis_new', methods: ['GET', 'POST'])]
     public function new(Request $request): Response
     {
@@ -66,12 +70,13 @@ class DiagnosisController extends AbstractController
     }
 
     /**
-     * Показує заповнену форму та зберігає зміни: діагноз.
+     * Показує заповнену форму та зберігає зміни діагнозу.
      *
      * @param int $id Ідентифікатор запису
      * @param Request $request Поточний запит
      * @return Response
      */
+    #[RequireRole('manager')]
     #[Route('/{id}/edit', name: 'diagnosis_edit', requirements: ['id' => '\d+'], methods: ['GET', 'POST'])]
     public function edit(int $id, Request $request): Response
     {
@@ -84,6 +89,7 @@ class DiagnosisController extends AbstractController
      * @param int $id Ідентифікатор запису
      * @return Response
      */
+    #[RequireRole('admin')]
     #[Route('/{id}/delete', name: 'diagnosis_delete', requirements: ['id' => '\d+'], methods: ['POST'])]
     public function delete(int $id): Response
     {

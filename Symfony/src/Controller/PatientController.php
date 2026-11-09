@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Entity\Patient;
 use App\Filter\FiltersRecords;
+use App\Security\RequireRole;
 use Doctrine\DBAL\Exception\ForeignKeyConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -11,6 +12,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
+#[RequireRole('client')]
 #[Route('/patients')]
 class PatientController extends AbstractController
 {
@@ -53,11 +55,12 @@ class PatientController extends AbstractController
     }
 
     /**
-     * Показує порожню форму та зберігає новий запис: пацієнта.
+     * Показує порожню форму та зберігає нового пацієнта.
      *
      * @param Request $request Поточний запит
      * @return Response
      */
+    #[RequireRole('manager')]
     #[Route('/new', name: 'patient_new', methods: ['GET', 'POST'])]
     public function new(Request $request): Response
     {
@@ -65,12 +68,13 @@ class PatientController extends AbstractController
     }
 
     /**
-     * Показує заповнену форму та зберігає зміни: пацієнта.
+     * Показує заповнену форму та зберігає зміни пацієнта.
      *
      * @param int $id Ідентифікатор запису
      * @param Request $request Поточний запит
      * @return Response
      */
+    #[RequireRole('manager')]
     #[Route('/{id}/edit', name: 'patient_edit', requirements: ['id' => '\d+'], methods: ['GET', 'POST'])]
     public function edit(int $id, Request $request): Response
     {
@@ -83,6 +87,7 @@ class PatientController extends AbstractController
      * @param int $id Ідентифікатор запису
      * @return Response
      */
+    #[RequireRole('admin')]
     #[Route('/{id}/delete', name: 'patient_delete', requirements: ['id' => '\d+'], methods: ['POST'])]
     public function delete(int $id): Response
     {
@@ -150,7 +155,11 @@ class PatientController extends AbstractController
             $patient->setLastName($lastName);
         }
 
-        $birthDate = \DateTimeImmutable::createFromFormat('!Y-m-d', (string) $request->request->get('birth_date'));
+        $birthDate = \DateTimeImmutable::createFromFormat(
+            '!Y-m-d',
+            (string) $request->request->get('birth_date')
+        );
+
         if (!$birthDate || $birthDate > new \DateTimeImmutable('today')) {
             $errors[] = 'Вкажіть правильну дату народження.';
         } else {

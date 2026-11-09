@@ -5,6 +5,7 @@ namespace App\Controller;
 use App\Entity\Diagnosis;
 use App\Entity\Treatment;
 use App\Filter\FiltersRecords;
+use App\Security\RequireRole;
 use Doctrine\DBAL\Exception\ForeignKeyConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -12,6 +13,8 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
+// Доступ: client переглядає, manager додає та змінює, admin видаляє.
+#[RequireRole('client')]
 #[Route('/treatments')]
 class TreatmentController extends AbstractController
 {
@@ -60,6 +63,7 @@ class TreatmentController extends AbstractController
      * @param Request $request Поточний запит
      * @return Response
      */
+    #[RequireRole('manager')]
     #[Route('/new', name: 'treatment_new', methods: ['GET', 'POST'])]
     public function new(Request $request): Response
     {
@@ -73,6 +77,7 @@ class TreatmentController extends AbstractController
      * @param Request $request Поточний запит
      * @return Response
      */
+    #[RequireRole('manager')]
     #[Route('/{id}/edit', name: 'treatment_edit', requirements: ['id' => '\d+'], methods: ['GET', 'POST'])]
     public function edit(int $id, Request $request): Response
     {
@@ -85,6 +90,7 @@ class TreatmentController extends AbstractController
      * @param int $id Ідентифікатор запису
      * @return Response
      */
+    #[RequireRole('admin')]
     #[Route('/{id}/delete', name: 'treatment_delete', requirements: ['id' => '\d+'], methods: ['POST'])]
     public function delete(int $id): Response
     {
@@ -153,7 +159,11 @@ class TreatmentController extends AbstractController
             $treatment->setPrescription($prescription);
         }
 
-        $startDate = \DateTimeImmutable::createFromFormat('!Y-m-d', (string) $request->request->get('start_date'));
+        $startDate = \DateTimeImmutable::createFromFormat(
+            '!Y-m-d',
+            (string) $request->request->get('start_date')
+        );
+
         if (!$startDate) {
             $errors[] = 'Вкажіть правильну дату початку.';
         } else {
@@ -162,7 +172,10 @@ class TreatmentController extends AbstractController
 
         // Дата завершення необов'язкова, але не може бути раніше дати початку.
         $endDateText = (string) $request->request->get('end_date');
-        $endDate = $endDateText === '' ? null : \DateTimeImmutable::createFromFormat('!Y-m-d', $endDateText);
+        $endDate = $endDateText === ''
+            ? null
+            : \DateTimeImmutable::createFromFormat('!Y-m-d', $endDateText);
+
         if ($endDate === false || ($endDate && $startDate && $endDate < $startDate)) {
             $errors[] = 'Дата завершення неправильна або раніша за дату початку.';
         } else {

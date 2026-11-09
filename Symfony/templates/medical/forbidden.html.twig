@@ -1,0 +1,10 @@
+{% extends 'medical/layout.html.twig' %}
+
+{% block title %}Доступ заборонено{% endblock %}
+
+{% block content %}
+    <h1>403: доступ заборонено</h1>
+    <p>Ваша роль не дозволяє виконати цю дію.</p>
+    <p>Client може переглядати записи, Manager може ще додавати й змінювати, а Admin може ще видаляти записи й керувати ролями.</p>
+    <a class="btn" href="{{ path('medical_home') }}">На головну</a>
+{% endblock %}

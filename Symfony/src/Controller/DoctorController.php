@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Entity\Doctor;
 use App\Filter\FiltersRecords;
+use App\Security\RequireRole;
 use Doctrine\DBAL\Exception\ForeignKeyConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -11,6 +12,8 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
+// Доступ: client переглядає, manager додає та змінює, admin видаляє.
+#[RequireRole('client')]
 #[Route('/doctors')]
 class DoctorController extends AbstractController
 {
@@ -53,11 +56,12 @@ class DoctorController extends AbstractController
     }
 
     /**
-     * Показує порожню форму та зберігає новий запис: лікаря.
+     * Показує порожню форму та зберігає нового лікаря.
      *
      * @param Request $request Поточний запит
      * @return Response
      */
+    #[RequireRole('manager')]
     #[Route('/new', name: 'doctor_new', methods: ['GET', 'POST'])]
     public function new(Request $request): Response
     {
@@ -65,12 +69,13 @@ class DoctorController extends AbstractController
     }
 
     /**
-     * Показує заповнену форму та зберігає зміни: лікаря.
+     * Показує заповнену форму та зберігає зміни лікаря.
      *
      * @param int $id Ідентифікатор запису
      * @param Request $request Поточний запит
      * @return Response
      */
+    #[RequireRole('manager')]
     #[Route('/{id}/edit', name: 'doctor_edit', requirements: ['id' => '\d+'], methods: ['GET', 'POST'])]
     public function edit(int $id, Request $request): Response
     {
@@ -83,6 +88,7 @@ class DoctorController extends AbstractController
      * @param int $id Ідентифікатор запису
      * @return Response
      */
+    #[RequireRole('admin')]
     #[Route('/{id}/delete', name: 'doctor_delete', requirements: ['id' => '\d+'], methods: ['POST'])]
     public function delete(int $id): Response
     {

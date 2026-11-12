@@ -4,129 +4,150 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\FiltersRecords;
 use App\Models\Appointment;
-use App\Models\Doctor;
-use App\Models\Patient;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+use Symfony\Component\HttpFoundation\Response;
 
 class AppointmentController extends Controller
 {
     use FiltersRecords;
 
     /**
-     * Показує список прийомів із фільтрами та пагінацією.
+     * Поля, за якими можна фільтрувати список: [поле таблиці => тип пошуку].
+     * EQUAL - точний збіг, LIKE - частина тексту, BETWEEN - діапазон (field[gte], field[lte]) або точна дата.
      *
-     * @param Request $request Поточний запит
-     * @return \Illuminate\Contracts\View\View
+     * @var array<string, string>
      */
-    public function index(Request $request)
+    public const FIELDS = [
+        'id' => 'EQUAL',
+        'patient_id' => 'EQUAL',
+        'doctor_id' => 'EQUAL',
+        'appointment_at' => 'BETWEEN',
+        'complaints' => 'LIKE',
+        'created_at' => 'BETWEEN',
+        'updated_at' => 'BETWEEN',
+    ];
+
+    /**
+     * READ: повертає список прийомів з фільтрацією та пагінацією.
+     * Фільтри задаються параметрами запиту за полями з FIELDS,
+     * а пагінація - параметрами page та itemsPerPage.
+     *
+     * @param Request $request Запит із параметрами фільтра
+     * @return JsonResponse
+     */
+    public function getAppointments(Request $request): JsonResponse
     {
-        $query = Appointment::with(['patient', 'doctor'])->latest('appointment_at');
+        $criteria = $request->query();
+        $query = $this->filterData(Appointment::with(['patient', 'doctor'])->latest('appointment_at'), $criteria, self::FIELDS);
 
-        $this->applyFilters($query, $request, [
-            'id' => 'exact',
-            'patient_id' => 'exact',
-            'doctor_id' => 'exact',
-            'appointment_at' => 'date',
-            'complaints' => 'text',
-            'created_at' => 'date',
-            'updated_at' => 'date',
-        ]);
-
-        return view('medical.appointments.index', [
-            'appointments' => $query->paginate($this->itemsPerPage($request))->withQueryString(),
-            'patients' => Patient::orderBy('last_name')->get(),
-            'doctors' => Doctor::orderBy('last_name')->get(),
-        ]);
+        return response()->json($this->paginate($query, $criteria), Response::HTTP_OK);
     }
 
     /**
-     * Показує порожню форму, щоб додати прийом.
+     * READ: повертає один запис за id.
      *
-     * @return \Illuminate\Contracts\View\View
+     * @param string $id Ідентифікатор запису
+     * @return JsonResponse
      */
-    public function create()
+    public function getAppointmentById(string $id): JsonResponse
     {
-        return view('medical.appointments.form', [
-            'appointment' => new Appointment(),
-            'patients' => Patient::orderBy('last_name')->get(),
-            'doctors' => Doctor::orderBy('last_name')->get(),
-        ]);
+        $appointment = Appointment::with(['patient', 'doctor'])->find($id);
+        if (!$appointment) {
+            return response()->json(['error' => 'Прийом не знайдено'], Response::HTTP_NOT_FOUND);
+        }
+
+        return response()->json($appointment, Response::HTTP_OK);
     }
 
     /**
-     * Перевіряє дані форми та зберігає новий прийом у базі.
+     * CREATE: створює новий запис із JSON-даних запиту.
      *
-     * @param Request $request Дані, надіслані з форми
-     * @return \Illuminate\Http\RedirectResponse
+     * @param Request $request Запит із JSON-тілом
+     * @return JsonResponse
      */
-    public function store(Request $request)
+    public function createAppointment(Request $request): JsonResponse
     {
-        Appointment::create($this->validated($request));
+        $data = $request->json()->all();
+        $errors = $this->validateData($data, true);
+        if ($errors) {
+            return response()->json(['errors' => $errors], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
 
-        return redirect()->route('appointments.index');
+        $appointment = Appointment::create($data);
+
+        return response()->json($appointment->fresh(), Response::HTTP_CREATED);
     }
 
     /**
-     * Показує заповнену форму, щоб змінити прийом.
+     * UPDATE: змінює лише ті поля, які передано в JSON.
      *
-     * @param Appointment $appointment Запис, знайдений за id з адреси
-     * @return \Illuminate\Contracts\View\View
+     * @param string $id Ідентифікатор запису
+     * @param Request $request Запит із JSON-тілом
+     * @return JsonResponse
      */
-    public function edit(Appointment $appointment)
+    public function updateAppointmentById(string $id, Request $request): JsonResponse
     {
-        return view('medical.appointments.form', [
-            'appointment' => $appointment,
-            'patients' => Patient::orderBy('last_name')->get(),
-            'doctors' => Doctor::orderBy('last_name')->get(),
-        ]);
+        $appointment = Appointment::find($id);
+        if (!$appointment) {
+            return response()->json(['error' => 'Прийом не знайдено'], Response::HTTP_NOT_FOUND);
+        }
+
+        $data = $request->json()->all();
+        $errors = $this->validateData($data, false, $appointment);
+        if ($errors) {
+            return response()->json(['errors' => $errors], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $appointment->update($data);
+
+        return response()->json($appointment->fresh(), Response::HTTP_OK);
     }
 
     /**
-     * Перевіряє дані форми та зберігає зміни.
+     * DELETE: видаляє запис і повертає 204 No Content.
+     * Якщо з записом пов'язані інші дані, повертає 409 Conflict.
      *
-     * @param Request $request Дані, надіслані з форми
-     * @param Appointment $appointment Запис, який треба змінити
-     * @return \Illuminate\Http\RedirectResponse
+     * @param string $id Ідентифікатор запису
+     * @return JsonResponse
      */
-    public function update(Request $request, Appointment $appointment)
+    public function deleteAppointmentById(string $id): JsonResponse
     {
-        $appointment->update($this->validated($request));
+        $appointment = Appointment::find($id);
+        if (!$appointment) {
+            return response()->json(['error' => 'Прийом не знайдено'], Response::HTTP_NOT_FOUND);
+        }
 
-        return redirect()->route('appointments.index');
-    }
-
-    /**
-     * Видаляє прийом, якщо з ним не пов'язані інші записи.
-     *
-     * @param Appointment $appointment Запис, який треба видалити
-     * @return \Illuminate\Http\RedirectResponse
-     */
-    public function destroy(Appointment $appointment)
-    {
         try {
             $appointment->delete();
         } catch (QueryException) {
-            return redirect()->route('appointments.index')
-                ->with('error', 'Запис не можна видалити, бо з ним пов\'язані інші записи.');
+            return response()->json(['error' => 'Запис не можна видалити, бо з ним пов\'язані інші записи'], Response::HTTP_CONFLICT);
         }
 
-        return redirect()->route('appointments.index');
+        return response()->json(null, Response::HTTP_NO_CONTENT);
     }
 
     /**
-     * Перевіряє дані форми за правилами.
+     * Перевіряє дані з JSON. Для нового запису обов'язкові всі поля, для оновлення перевіряються лише передані.
      *
-     * @param Request $request Дані, надіслані з форми
-     * @return array Перевірені дані
+     * @param array $data Дані з JSON
+     * @param bool $isNew true, якщо створюється новий запис
+     * @param Appointment|null $appointment Наявний запис (для оновлення)
+     * @return array Помилки у форматі [поле => [повідомлення]]
      */
-    private function validated(Request $request): array
+    private function validateData(array $data, bool $isNew, ?Appointment $appointment = null): array
     {
-        return $request->validate([
-            'patient_id' => ['required', 'exists:patients,id'],
-            'doctor_id' => ['required', 'exists:doctors,id'],
-            'appointment_at' => ['required', 'date'],
-            'complaints' => ['nullable', 'string'],
+        $r = $isNew ? 'required|' : 'sometimes|required|';
+
+        $validator = Validator::make($data, [
+            'patient_id' => $r.'integer|exists:patients,id',
+            'doctor_id' => $r.'integer|exists:doctors,id',
+            'appointment_at' => $r.'date_format:Y-m-d H:i',
+            'complaints' => 'nullable|string',
         ]);
+
+        return $validator->errors()->toArray();
     }
 }

@@ -4,168 +4,197 @@ namespace App\Controller;
 
 use App\Entity\Appointment;
 use App\Entity\Diagnosis;
-use App\Filter\FiltersRecords;
+use App\Repository\DiagnosisRepository;
 use Doctrine\DBAL\Exception\ForeignKeyConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
-#[Route('/diagnoses')]
+#[Route('/api/diagnoses')]
 class DiagnosisController extends AbstractController
 {
-    use FiltersRecords;
+    /**
+     * Менеджер сутностей Doctrine для роботи з базою даних.
+     *
+     * @var EntityManagerInterface
+     */
+    private EntityManagerInterface $em;
 
     /**
-     * Отримує менеджер сутностей для роботи з базою.
+     * Репозиторій із фільтрацією та пагінацією.
+     *
+     * @var DiagnosisRepository
+     */
+    private DiagnosisRepository $repository;
+
+    /**
+     * Отримує менеджер сутностей і репозиторій.
      *
      * @param EntityManagerInterface $em Менеджер сутностей Doctrine
+     * @param DiagnosisRepository $repository Репозиторій таблиці
      */
-    public function __construct(private EntityManagerInterface $em)
+    public function __construct(EntityManagerInterface $em, DiagnosisRepository $repository)
     {
+        $this->em = $em;
+        $this->repository = $repository;
     }
 
     /**
-     * Показує список діагнозів із фільтрами та пагінацією.
+     * READ: повертає список діагнозів з фільтрацією та пагінацією.
+     * Фільтри задаються параметрами запиту за полями з DiagnosisRepository::FIELDS,
+     * а пагінація - параметрами page та itemsPerPage.
      *
-     * @param Request $request Поточний запит
-     * @return Response
+     * @param Request $request Запит із параметрами фільтра
+     * @return JsonResponse
      */
-    #[Route('', name: 'diagnosis_index', methods: ['GET'])]
-    public function index(Request $request): Response
+    #[Route('', name: 'diagnosis_list', methods: [Request::METHOD_GET])]
+    public function getDiagnoses(Request $request): JsonResponse
     {
-        $qb = $this->em->createQueryBuilder()
-            ->select('r')
-            ->from(Diagnosis::class, 'r')
-            ->orderBy('r.id', 'DESC');
+        $result = $this->repository->findByCriteria($request->query->all());
 
-        $this->applyFilters($qb, $request, [
-            'id' => ['r.id', 'exact'],
-            'appointment_id' => ['r.appointment', 'exact'],
-            'name' => ['r.name', 'text'],
-            'description' => ['r.description', 'text'],
-        ]);
-
-        return $this->render('medical/diagnoses/index.html.twig', [
-            'pagination' => $this->paginate($qb, $request),
-            'appointments' => $this->em->getRepository(Appointment::class)->findBy([], ['appointmentAt' => 'DESC']),
-        ]);
+        return $this->json($result, Response::HTTP_OK);
     }
 
     /**
-     * Показує порожню форму та зберігає новий запис: діагноз.
-     *
-     * @param Request $request Поточний запит
-     * @return Response
-     */
-    #[Route('/new', name: 'diagnosis_new', methods: ['GET', 'POST'])]
-    public function new(Request $request): Response
-    {
-        return $this->handleForm(new Diagnosis(), $request);
-    }
-
-    /**
-     * Показує заповнену форму та зберігає зміни: діагноз.
+     * READ: повертає один запис за id.
      *
      * @param int $id Ідентифікатор запису
-     * @param Request $request Поточний запит
-     * @return Response
+     * @return JsonResponse
      */
-    #[Route('/{id}/edit', name: 'diagnosis_edit', requirements: ['id' => '\d+'], methods: ['GET', 'POST'])]
-    public function edit(int $id, Request $request): Response
+    #[Route('/{id}', name: 'diagnosis_show', requirements: ['id' => '\d+'], methods: [Request::METHOD_GET])]
+    public function getDiagnosisById(int $id): JsonResponse
     {
-        return $this->handleForm($this->findOr404($id), $request);
+        $diagnosis = $this->em->find(Diagnosis::class, $id);
+        if (!$diagnosis) {
+            return $this->json(['error' => 'Діагноз не знайдено'], Response::HTTP_NOT_FOUND);
+        }
+
+        return $this->json($diagnosis, Response::HTTP_OK);
     }
 
     /**
-     * Видаляє діагноз, якщо з ним не пов'язані інші записи.
+     * CREATE: створює новий запис із JSON-даних запиту.
+     *
+     * @param Request $request Запит із JSON-тілом
+     * @return JsonResponse
+     */
+    #[Route('', name: 'diagnosis_create', methods: [Request::METHOD_POST])]
+    public function createDiagnosis(Request $request): JsonResponse
+    {
+        $diagnosis = new Diagnosis();
+        $errors = $this->fill($diagnosis, $this->getJsonData($request), true);
+
+        if ($errors) {
+            return $this->json(['errors' => $errors], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $this->em->persist($diagnosis);
+        $this->em->flush();
+
+        return $this->json($diagnosis, Response::HTTP_CREATED);
+    }
+
+    /**
+     * UPDATE: змінює лише ті поля, які передано в JSON.
      *
      * @param int $id Ідентифікатор запису
-     * @return Response
+     * @param Request $request Запит із JSON-тілом
+     * @return JsonResponse
      */
-    #[Route('/{id}/delete', name: 'diagnosis_delete', requirements: ['id' => '\d+'], methods: ['POST'])]
-    public function delete(int $id): Response
+    #[Route('/{id}', name: 'diagnosis_update', requirements: ['id' => '\d+'], methods: [Request::METHOD_PATCH])]
+    public function updateDiagnosisById(int $id, Request $request): JsonResponse
     {
-        $this->em->remove($this->findOr404($id));
+        $diagnosis = $this->em->find(Diagnosis::class, $id);
+        if (!$diagnosis) {
+            return $this->json(['error' => 'Діагноз не знайдено'], Response::HTTP_NOT_FOUND);
+        }
+
+        $errors = $this->fill($diagnosis, $this->getJsonData($request), false);
+
+        if ($errors) {
+            return $this->json(['errors' => $errors], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $this->em->flush();
+
+        return $this->json($diagnosis, Response::HTTP_OK);
+    }
+
+    /**
+     * DELETE: видаляє запис і повертає 204 No Content.
+     * Якщо з записом пов'язані інші дані, повертає 409 Conflict.
+     *
+     * @param int $id Ідентифікатор запису
+     * @return JsonResponse
+     */
+    #[Route('/{id}', name: 'diagnosis_delete', requirements: ['id' => '\d+'], methods: [Request::METHOD_DELETE])]
+    public function deleteDiagnosisById(int $id): JsonResponse
+    {
+        $diagnosis = $this->em->find(Diagnosis::class, $id);
+        if (!$diagnosis) {
+            return $this->json(['error' => 'Діагноз не знайдено'], Response::HTTP_NOT_FOUND);
+        }
 
         try {
+            $this->em->remove($diagnosis);
             $this->em->flush();
         } catch (ForeignKeyConstraintViolationException) {
-            return $this->redirectToRoute('diagnosis_index', ['error' => 1]);
+            return $this->json(['error' => 'Запис не можна видалити, бо з ним пов\'язані інші записи'], Response::HTTP_CONFLICT);
         }
 
-        return $this->redirectToRoute('diagnosis_index');
+        return $this->json(null, Response::HTTP_NO_CONTENT);
     }
 
     /**
-     * Показує форму, а після надсилання перевіряє та зберігає дані.
+     * Читає JSON-тіло запиту як масив.
      *
-     * @param Diagnosis $diagnosis Новий або наявний запис
      * @param Request $request Поточний запит
-     * @return Response
+     * @return array
      */
-    private function handleForm(Diagnosis $diagnosis, Request $request): Response
+    private function getJsonData(Request $request): array
     {
-        $errors = [];
+        $data = json_decode($request->getContent(), true);
 
-        if ($request->isMethod('POST')) {
-            $errors = $this->fill($diagnosis, $request);
-
-            if (!$errors) {
-                $this->em->persist($diagnosis);
-                $this->em->flush();
-
-                return $this->redirectToRoute('diagnosis_index');
-            }
-        }
-
-        return $this->render('medical/diagnoses/form.html.twig', [
-            'diagnosis' => $diagnosis,
-            'errors' => $errors,
-            'appointments' => $this->em->getRepository(Appointment::class)->findBy([], ['appointmentAt' => 'DESC']),
-        ]);
+        return is_array($data) ? $data : [];
     }
 
     /**
-     * Переносить дані з форми в об'єкт і збирає помилки.
+     * Переносить дані з JSON в об'єкт і повертає помилки перевірки.
+     * Для нового запису всі обов'язкові поля потрібні, для оновлення перевіряються лише передані.
      *
      * @param Diagnosis $diagnosis Запис, який треба заповнити
-     * @param Request $request Поточний запит
-     * @return array Список помилок
+     * @param array $data Дані з JSON
+     * @param bool $isNew true, якщо створюється новий запис
+     * @return array Помилки у форматі [поле => повідомлення]
      */
-    private function fill(Diagnosis $diagnosis, Request $request): array
+    private function fill(Diagnosis $diagnosis, array $data, bool $isNew): array
     {
         $errors = [];
 
-        $appointment = $this->em->find(Appointment::class, (int) $request->request->get('appointment_id'));
-        if (!$appointment) {
-            $errors[] = 'Виберіть прийом.';
-        } else {
-            $diagnosis->setAppointment($appointment);
+        if ($isNew || array_key_exists('appointment_id', $data)) {
+            $related = $this->em->find(Appointment::class, (int) ($data['appointment_id'] ?? 0));
+            if (!$related) {
+                $errors['appointment_id'] = 'Запис «Прийом» з таким id не знайдено.';
+            } else {
+                $diagnosis->setAppointment($related);
+            }
         }
-
-        $name = trim((string) $request->request->get('name'));
-        if ($name === '' || mb_strlen($name) > 150) {
-            $errors[] = 'Заповніть поле «Назва діагнозу» (до 150 символів).';
-        } else {
-            $diagnosis->setName($name);
+        if ($isNew || array_key_exists('name', $data)) {
+            $value = trim((string) ($data['name'] ?? ''));
+            if ($value === '' || mb_strlen($value) > 150) {
+                $errors['name'] = 'Поле «Назва діагнозу» обов\'язкове (до 150 символів).';
+            } else {
+                $diagnosis->setName($value);
+            }
         }
-
-        $diagnosis->setDescription(trim((string) $request->request->get('description')) ?: null);
+        if ($isNew || array_key_exists('description', $data)) {
+            $value = trim((string) ($data['description'] ?? ''));
+            $diagnosis->setDescription($value === '' ? null : $value);
+        }
 
         return $errors;
-    }
-
-    /**
-     * Шукає запис за id або показує сторінку 404.
-     *
-     * @param int $id Ідентифікатор запису
-     * @return Diagnosis
-     */
-    private function findOr404(int $id): Diagnosis
-    {
-        return $this->em->find(Diagnosis::class, $id)
-            ?? throw $this->createNotFoundException('Запис не знайдено.');
     }
 }

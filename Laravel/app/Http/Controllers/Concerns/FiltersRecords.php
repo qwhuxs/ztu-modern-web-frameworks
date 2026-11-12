@@ -3,53 +3,76 @@
 namespace App\Http\Controllers\Concerns;
 
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Http\Request;
 
+/**
+ * Фільтрація за полями таблиці та пагінація для списків.
+ * Контролер задає константу FIELDS: [поле => EQUAL, LIKE або BETWEEN].
+ */
 trait FiltersRecords
 {
     /**
-     * Додає до запиту умови для заповнених полів фільтра.
+     * Додає до запиту умови для кожного заповненого фільтра.
+     * EQUAL - точний збіг, LIKE - пошук частини тексту,
+     * BETWEEN - діапазон (field[gte], field[lte]) або точна дата.
      *
      * @param Builder $query Запит до таблиці
-     * @param Request $request Поточний запит із параметрами фільтра
-     * @param array $filters Поля таблиці та типи пошуку: text, exact або date
-     * @return void
+     * @param array $criteria Параметри запиту
+     * @param array<string, string> $fields Поля фільтрації та їхні типи
+     * @return Builder
      */
-    private function applyFilters(Builder $query, Request $request, array $filters): void
+    protected function filterData(Builder $query, array $criteria, array $fields): Builder
     {
-        foreach ($filters as $field => $type) {
-            $value = $request->query($field);
-
-            if (!is_string($value) || trim($value) === '') {
+        foreach ($fields as $field => $type) {
+            if (!isset($criteria[$field]) || $criteria[$field] === '' || $criteria[$field] === []) {
                 continue;
             }
 
-            $value = trim($value);
+            $value = $criteria[$field];
 
-            if ($type === 'text') {
+            if ($type === 'LIKE' && is_string($value)) {
                 $query->where($field, 'like', '%'.addcslashes($value, '%_\\').'%');
-            } elseif ($type === 'exact' && ctype_digit($value)) {
-                $query->where($field, (int) $value);
-            } elseif ($type === 'date') {
-                $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $value);
-
-                if ($date) {
-                    $query->whereDate($field, $date->format('Y-m-d'));
+            } elseif ($type === 'EQUAL' && is_scalar($value)) {
+                $query->where($field, $value);
+            } elseif ($type === 'BETWEEN') {
+                if (is_array($value)) {
+                    if (!empty($value['gte'])) {
+                        $query->where($field, '>=', $value['gte']);
+                    }
+                    if (!empty($value['lte'])) {
+                        $query->where($field, '<=', $value['lte']);
+                    }
+                } else {
+                    $query->whereDate($field, $value);
                 }
             }
         }
+
+        return $query;
     }
 
     /**
-     * Визначає кількість записів на сторінці.
+     * Розбиває результат на сторінки.
+     * Записи віддаються масивом моделей, тому кожна з них перетворюється на JSON своїм методом jsonSerialize().
      *
-     * @param Request $request Поточний запит із параметром itemsPerPage
-     * @return int Дозволена кількість записів
+     * @param Builder $query Запит до таблиці
+     * @param array $criteria Параметри запиту з page та itemsPerPage
+     * @return array{data: array, meta: array{page: int, itemsPerPage: int, total: int, pages: int}}
      */
-    private function itemsPerPage(Request $request): int
+    protected function paginate(Builder $query, array $criteria): array
     {
-        $value = (int) $request->query('itemsPerPage', 10);
+        $page = max(1, (int) ($criteria['page'] ?? 1));
+        $itemsPerPage = min(100, max(1, (int) ($criteria['itemsPerPage'] ?? 10)));
 
-        return in_array($value, [5, 10, 20, 50], true) ? $value : 10;
+        $paginator = $query->paginate($itemsPerPage, ['*'], 'page', $page);
+
+        return [
+            'data' => $paginator->items(),
+            'meta' => [
+                'page' => $paginator->currentPage(),
+                'itemsPerPage' => $paginator->perPage(),
+                'total' => $paginator->total(),
+                'pages' => $paginator->lastPage(),
+            ],
+        ];
     }
 }

@@ -3,124 +3,149 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\FiltersRecords;
-use App\Models\Appointment;
 use App\Models\Diagnosis;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+use Symfony\Component\HttpFoundation\Response;
 
 class DiagnosisController extends Controller
 {
     use FiltersRecords;
 
     /**
-     * Показує список діагнозів із фільтрами та пагінацією.
+     * Поля, за якими можна фільтрувати список: [поле таблиці => тип пошуку].
+     * EQUAL - точний збіг, LIKE - частина тексту, BETWEEN - діапазон (field[gte], field[lte]) або точна дата.
      *
-     * @param Request $request Поточний запит
-     * @return \Illuminate\Contracts\View\View
+     * @var array<string, string>
      */
-    public function index(Request $request)
+    public const FIELDS = [
+        'id' => 'EQUAL',
+        'appointment_id' => 'EQUAL',
+        'name' => 'LIKE',
+        'description' => 'LIKE',
+        'created_at' => 'BETWEEN',
+        'updated_at' => 'BETWEEN',
+    ];
+
+    /**
+     * READ: повертає список діагнозів з фільтрацією та пагінацією.
+     * Фільтри задаються параметрами запиту за полями з FIELDS,
+     * а пагінація - параметрами page та itemsPerPage.
+     *
+     * @param Request $request Запит із параметрами фільтра
+     * @return JsonResponse
+     */
+    public function getDiagnoses(Request $request): JsonResponse
     {
-        $query = Diagnosis::with('appointment.patient')->latest();
+        $criteria = $request->query();
+        $query = $this->filterData(Diagnosis::with(['appointment'])->latest('id'), $criteria, self::FIELDS);
 
-        $this->applyFilters($query, $request, [
-            'id' => 'exact',
-            'appointment_id' => 'exact',
-            'name' => 'text',
-            'description' => 'text',
-            'created_at' => 'date',
-            'updated_at' => 'date',
-        ]);
-
-        return view('medical.diagnoses.index', [
-            'diagnoses' => $query->paginate($this->itemsPerPage($request))->withQueryString(),
-            'appointments' => Appointment::with(['patient', 'doctor'])->latest('appointment_at')->get(),
-        ]);
+        return response()->json($this->paginate($query, $criteria), Response::HTTP_OK);
     }
 
     /**
-     * Показує порожню форму, щоб додати діагноз.
+     * READ: повертає один запис за id.
      *
-     * @return \Illuminate\Contracts\View\View
+     * @param string $id Ідентифікатор запису
+     * @return JsonResponse
      */
-    public function create()
+    public function getDiagnosisById(string $id): JsonResponse
     {
-        return view('medical.diagnoses.form', [
-            'diagnosis' => new Diagnosis(),
-            'appointments' => Appointment::with(['patient', 'doctor'])->latest('appointment_at')->get(),
-        ]);
+        $diagnosis = Diagnosis::with(['appointment'])->find($id);
+        if (!$diagnosis) {
+            return response()->json(['error' => 'Діагноз не знайдено'], Response::HTTP_NOT_FOUND);
+        }
+
+        return response()->json($diagnosis, Response::HTTP_OK);
     }
 
     /**
-     * Перевіряє дані форми та зберігає новий діагноз у базі.
+     * CREATE: створює новий запис із JSON-даних запиту.
      *
-     * @param Request $request Дані, надіслані з форми
-     * @return \Illuminate\Http\RedirectResponse
+     * @param Request $request Запит із JSON-тілом
+     * @return JsonResponse
      */
-    public function store(Request $request)
+    public function createDiagnosis(Request $request): JsonResponse
     {
-        Diagnosis::create($this->validated($request));
+        $data = $request->json()->all();
+        $errors = $this->validateData($data, true);
+        if ($errors) {
+            return response()->json(['errors' => $errors], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
 
-        return redirect()->route('diagnoses.index');
+        $diagnosis = Diagnosis::create($data);
+
+        return response()->json($diagnosis->fresh(), Response::HTTP_CREATED);
     }
 
     /**
-     * Показує заповнену форму, щоб змінити діагноз.
+     * UPDATE: змінює лише ті поля, які передано в JSON.
      *
-     * @param Diagnosis $diagnosis Запис, знайдений за id з адреси
-     * @return \Illuminate\Contracts\View\View
+     * @param string $id Ідентифікатор запису
+     * @param Request $request Запит із JSON-тілом
+     * @return JsonResponse
      */
-    public function edit(Diagnosis $diagnosis)
+    public function updateDiagnosisById(string $id, Request $request): JsonResponse
     {
-        return view('medical.diagnoses.form', [
-            'diagnosis' => $diagnosis,
-            'appointments' => Appointment::with(['patient', 'doctor'])->latest('appointment_at')->get(),
-        ]);
+        $diagnosis = Diagnosis::find($id);
+        if (!$diagnosis) {
+            return response()->json(['error' => 'Діагноз не знайдено'], Response::HTTP_NOT_FOUND);
+        }
+
+        $data = $request->json()->all();
+        $errors = $this->validateData($data, false, $diagnosis);
+        if ($errors) {
+            return response()->json(['errors' => $errors], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $diagnosis->update($data);
+
+        return response()->json($diagnosis->fresh(), Response::HTTP_OK);
     }
 
     /**
-     * Перевіряє дані форми та зберігає зміни.
+     * DELETE: видаляє запис і повертає 204 No Content.
+     * Якщо з записом пов'язані інші дані, повертає 409 Conflict.
      *
-     * @param Request $request Дані, надіслані з форми
-     * @param Diagnosis $diagnosis Запис, який треба змінити
-     * @return \Illuminate\Http\RedirectResponse
+     * @param string $id Ідентифікатор запису
+     * @return JsonResponse
      */
-    public function update(Request $request, Diagnosis $diagnosis)
+    public function deleteDiagnosisById(string $id): JsonResponse
     {
-        $diagnosis->update($this->validated($request));
+        $diagnosis = Diagnosis::find($id);
+        if (!$diagnosis) {
+            return response()->json(['error' => 'Діагноз не знайдено'], Response::HTTP_NOT_FOUND);
+        }
 
-        return redirect()->route('diagnoses.index');
-    }
-
-    /**
-     * Видаляє діагноз, якщо з ним не пов'язані інші записи.
-     *
-     * @param Diagnosis $diagnosis Запис, який треба видалити
-     * @return \Illuminate\Http\RedirectResponse
-     */
-    public function destroy(Diagnosis $diagnosis)
-    {
         try {
             $diagnosis->delete();
         } catch (QueryException) {
-            return redirect()->route('diagnoses.index')
-                ->with('error', 'Запис не можна видалити, бо з ним пов\'язані інші записи.');
+            return response()->json(['error' => 'Запис не можна видалити, бо з ним пов\'язані інші записи'], Response::HTTP_CONFLICT);
         }
 
-        return redirect()->route('diagnoses.index');
+        return response()->json(null, Response::HTTP_NO_CONTENT);
     }
 
     /**
-     * Перевіряє дані форми за правилами.
+     * Перевіряє дані з JSON. Для нового запису обов'язкові всі поля, для оновлення перевіряються лише передані.
      *
-     * @param Request $request Дані, надіслані з форми
-     * @return array Перевірені дані
+     * @param array $data Дані з JSON
+     * @param bool $isNew true, якщо створюється новий запис
+     * @param Diagnosis|null $diagnosis Наявний запис (для оновлення)
+     * @return array Помилки у форматі [поле => [повідомлення]]
      */
-    private function validated(Request $request): array
+    private function validateData(array $data, bool $isNew, ?Diagnosis $diagnosis = null): array
     {
-        return $request->validate([
-            'appointment_id' => ['required', 'exists:appointments,id'],
-            'name' => ['required', 'string', 'max:150'],
-            'description' => ['nullable', 'string'],
+        $r = $isNew ? 'required|' : 'sometimes|required|';
+
+        $validator = Validator::make($data, [
+            'appointment_id' => $r.'integer|exists:appointments,id',
+            'name' => $r.'string|max:150',
+            'description' => 'nullable|string',
         ]);
+
+        return $validator->errors()->toArray();
     }
 }

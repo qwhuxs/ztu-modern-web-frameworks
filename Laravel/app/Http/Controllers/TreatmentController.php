@@ -3,126 +3,158 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\FiltersRecords;
-use App\Models\Diagnosis;
 use App\Models\Treatment;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+use Symfony\Component\HttpFoundation\Response;
 
 class TreatmentController extends Controller
 {
     use FiltersRecords;
 
     /**
-     * Показує список записів про лікування із фільтрами та пагінацією.
+     * Поля, за якими можна фільтрувати список: [поле таблиці => тип пошуку].
+     * EQUAL - точний збіг, LIKE - частина тексту, BETWEEN - діапазон (field[gte], field[lte]) або точна дата.
      *
-     * @param Request $request Поточний запит
-     * @return \Illuminate\Contracts\View\View
+     * @var array<string, string>
      */
-    public function index(Request $request)
+    public const FIELDS = [
+        'id' => 'EQUAL',
+        'diagnosis_id' => 'EQUAL',
+        'prescription' => 'LIKE',
+        'start_date' => 'BETWEEN',
+        'end_date' => 'BETWEEN',
+        'created_at' => 'BETWEEN',
+        'updated_at' => 'BETWEEN',
+    ];
+
+    /**
+     * READ: повертає список записів про лікування з фільтрацією та пагінацією.
+     * Фільтри задаються параметрами запиту за полями з FIELDS,
+     * а пагінація - параметрами page та itemsPerPage.
+     *
+     * @param Request $request Запит із параметрами фільтра
+     * @return JsonResponse
+     */
+    public function getTreatments(Request $request): JsonResponse
     {
-        $query = Treatment::with('diagnosis.appointment.patient')->latest();
+        $criteria = $request->query();
+        $query = $this->filterData(Treatment::with(['diagnosis'])->latest('id'), $criteria, self::FIELDS);
 
-        $this->applyFilters($query, $request, [
-            'id' => 'exact',
-            'diagnosis_id' => 'exact',
-            'prescription' => 'text',
-            'start_date' => 'date',
-            'end_date' => 'date',
-            'created_at' => 'date',
-            'updated_at' => 'date',
-        ]);
-
-        return view('medical.treatments.index', [
-            'treatments' => $query->paginate($this->itemsPerPage($request))->withQueryString(),
-            'diagnoses' => Diagnosis::with('appointment.patient')->latest()->get(),
-        ]);
+        return response()->json($this->paginate($query, $criteria), Response::HTTP_OK);
     }
 
     /**
-     * Показує порожню форму, щоб додати запис про лікування.
+     * READ: повертає один запис за id.
      *
-     * @return \Illuminate\Contracts\View\View
+     * @param string $id Ідентифікатор запису
+     * @return JsonResponse
      */
-    public function create()
+    public function getTreatmentById(string $id): JsonResponse
     {
-        return view('medical.treatments.form', [
-            'treatment' => new Treatment(),
-            'diagnoses' => Diagnosis::with('appointment.patient')->latest()->get(),
-        ]);
+        $treatment = Treatment::with(['diagnosis'])->find($id);
+        if (!$treatment) {
+            return response()->json(['error' => 'Запис про лікування не знайдено'], Response::HTTP_NOT_FOUND);
+        }
+
+        return response()->json($treatment, Response::HTTP_OK);
     }
 
     /**
-     * Перевіряє дані форми та зберігає новий запис про лікування у базі.
+     * CREATE: створює новий запис із JSON-даних запиту.
      *
-     * @param Request $request Дані, надіслані з форми
-     * @return \Illuminate\Http\RedirectResponse
+     * @param Request $request Запит із JSON-тілом
+     * @return JsonResponse
      */
-    public function store(Request $request)
+    public function createTreatment(Request $request): JsonResponse
     {
-        Treatment::create($this->validated($request));
+        $data = $request->json()->all();
+        $errors = $this->validateData($data, true);
+        if ($errors) {
+            return response()->json(['errors' => $errors], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
 
-        return redirect()->route('treatments.index');
+        $treatment = Treatment::create($data);
+
+        return response()->json($treatment->fresh(), Response::HTTP_CREATED);
     }
 
     /**
-     * Показує заповнену форму, щоб змінити запис про лікування.
+     * UPDATE: змінює лише ті поля, які передано в JSON.
      *
-     * @param Treatment $treatment Запис, знайдений за id з адреси
-     * @return \Illuminate\Contracts\View\View
+     * @param string $id Ідентифікатор запису
+     * @param Request $request Запит із JSON-тілом
+     * @return JsonResponse
      */
-    public function edit(Treatment $treatment)
+    public function updateTreatmentById(string $id, Request $request): JsonResponse
     {
-        return view('medical.treatments.form', [
-            'treatment' => $treatment,
-            'diagnoses' => Diagnosis::with('appointment.patient')->latest()->get(),
-        ]);
+        $treatment = Treatment::find($id);
+        if (!$treatment) {
+            return response()->json(['error' => 'Запис про лікування не знайдено'], Response::HTTP_NOT_FOUND);
+        }
+
+        $data = $request->json()->all();
+        $errors = $this->validateData($data, false, $treatment);
+        if ($errors) {
+            return response()->json(['errors' => $errors], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $treatment->update($data);
+
+        return response()->json($treatment->fresh(), Response::HTTP_OK);
     }
 
     /**
-     * Перевіряє дані форми та зберігає зміни.
+     * DELETE: видаляє запис і повертає 204 No Content.
+     * Якщо з записом пов'язані інші дані, повертає 409 Conflict.
      *
-     * @param Request $request Дані, надіслані з форми
-     * @param Treatment $treatment Запис, який треба змінити
-     * @return \Illuminate\Http\RedirectResponse
+     * @param string $id Ідентифікатор запису
+     * @return JsonResponse
      */
-    public function update(Request $request, Treatment $treatment)
+    public function deleteTreatmentById(string $id): JsonResponse
     {
-        $treatment->update($this->validated($request));
+        $treatment = Treatment::find($id);
+        if (!$treatment) {
+            return response()->json(['error' => 'Запис про лікування не знайдено'], Response::HTTP_NOT_FOUND);
+        }
 
-        return redirect()->route('treatments.index');
-    }
-
-    /**
-     * Видаляє запис про лікування, якщо з ним не пов'язані інші записи.
-     *
-     * @param Treatment $treatment Запис, який треба видалити
-     * @return \Illuminate\Http\RedirectResponse
-     */
-    public function destroy(Treatment $treatment)
-    {
         try {
             $treatment->delete();
         } catch (QueryException) {
-            return redirect()->route('treatments.index')
-                ->with('error', 'Запис не можна видалити, бо з ним пов\'язані інші записи.');
+            return response()->json(['error' => 'Запис не можна видалити, бо з ним пов\'язані інші записи'], Response::HTTP_CONFLICT);
         }
 
-        return redirect()->route('treatments.index');
+        return response()->json(null, Response::HTTP_NO_CONTENT);
     }
 
     /**
-     * Перевіряє дані форми за правилами.
+     * Перевіряє дані з JSON. Для нового запису обов'язкові всі поля, для оновлення перевіряються лише передані.
      *
-     * @param Request $request Дані, надіслані з форми
-     * @return array Перевірені дані
+     * @param array $data Дані з JSON
+     * @param bool $isNew true, якщо створюється новий запис
+     * @param Treatment|null $treatment Наявний запис (для оновлення)
+     * @return array Помилки у форматі [поле => [повідомлення]]
      */
-    private function validated(Request $request): array
+    private function validateData(array $data, bool $isNew, ?Treatment $treatment = null): array
     {
-        return $request->validate([
-            'diagnosis_id' => ['required', 'exists:diagnoses,id'],
-            'prescription' => ['required', 'string'],
-            'start_date' => ['required', 'date'],
-            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+        $r = $isNew ? 'required|' : 'sometimes|required|';
+
+        $validator = Validator::make($data, [
+            'diagnosis_id' => $r.'integer|exists:diagnoses,id',
+            'prescription' => $r.'string',
+            'start_date' => $r.'date_format:Y-m-d',
+            'end_date' => 'nullable|date_format:Y-m-d',
         ]);
+
+        // Дата завершення не може бути раніше дати початку (з урахуванням уже збережених даних).
+        $start = $data['start_date'] ?? $treatment?->start_date?->format('Y-m-d');
+        $end = array_key_exists('end_date', $data) ? $data['end_date'] : $treatment?->end_date?->format('Y-m-d');
+        if ($start && $end && $end < $start) {
+            $validator->errors()->add('end_date', 'Дата завершення не може бути раніше дати початку.');
+        }
+
+        return $validator->errors()->toArray();
     }
 }

@@ -4,99 +4,126 @@ namespace App\Http\Controllers;
 
 use App\Models\Patient;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+use Symfony\Component\HttpFoundation\Response;
 
 class PatientController extends Controller
 {
     /**
-     * Показує список пацієнтів.
+     * READ: повертає список пацієнтів.
+     * Кожна модель перетворюється на масив методом jsonSerialize().
      *
-     * @return \Illuminate\Contracts\View\View
+     * @return JsonResponse
      */
-    public function index()
+    public function getPatients(): JsonResponse
     {
-        return view('medical.patients.index', ['patients' => Patient::orderBy('last_name')->get()]);
+        return response()->json(Patient::query()->orderBy('last_name')->get(), Response::HTTP_OK);
     }
 
     /**
-     * Показує порожню форму, щоб додати пацієнта.
+     * READ: повертає один запис за id.
      *
-     * @return \Illuminate\Contracts\View\View
+     * @param string $id Ідентифікатор запису
+     * @return JsonResponse
      */
-    public function create()
+    public function getPatientById(string $id): JsonResponse
     {
-        return view('medical.patients.form', ['patient' => new Patient()]);
+        $patient = Patient::query()->find($id);
+        if (!$patient) {
+            return response()->json(['error' => 'Пацієнта не знайдено'], Response::HTTP_NOT_FOUND);
+        }
+
+        return response()->json($patient, Response::HTTP_OK);
     }
 
     /**
-     * Перевіряє дані форми та зберігає нового пацієнта у базі.
+     * CREATE: створює новий запис із JSON-даних запиту.
      *
-     * @param Request $request Дані, надіслані з форми
-     * @return \Illuminate\Http\RedirectResponse
+     * @param Request $request Запит із JSON-тілом
+     * @return JsonResponse
      */
-    public function store(Request $request)
+    public function createPatient(Request $request): JsonResponse
     {
-        Patient::create($this->validated($request));
+        $data = $request->json()->all();
+        $errors = $this->validateData($data, true);
+        if ($errors) {
+            return response()->json(['errors' => $errors], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
 
-        return redirect()->route('patients.index');
+        $patient = Patient::create($data);
+
+        return response()->json($patient->fresh(), Response::HTTP_CREATED);
     }
 
     /**
-     * Показує заповнену форму, щоб змінити пацієнта.
+     * UPDATE: змінює лише ті поля, які передано в JSON.
      *
-     * @param Patient $patient Запис, знайдений за id з адреси
-     * @return \Illuminate\Contracts\View\View
+     * @param string $id Ідентифікатор запису
+     * @param Request $request Запит із JSON-тілом
+     * @return JsonResponse
      */
-    public function edit(Patient $patient)
+    public function updatePatientById(string $id, Request $request): JsonResponse
     {
-        return view('medical.patients.form', ['patient' => $patient]);
+        $patient = Patient::find($id);
+        if (!$patient) {
+            return response()->json(['error' => 'Пацієнта не знайдено'], Response::HTTP_NOT_FOUND);
+        }
+
+        $data = $request->json()->all();
+        $errors = $this->validateData($data, false, $patient);
+        if ($errors) {
+            return response()->json(['errors' => $errors], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $patient->update($data);
+
+        return response()->json($patient->fresh(), Response::HTTP_OK);
     }
 
     /**
-     * Перевіряє дані форми та зберігає зміни.
+     * DELETE: видаляє запис і повертає 204 No Content.
+     * Якщо з записом пов'язані інші дані, повертає 409 Conflict.
      *
-     * @param Request $request Дані, надіслані з форми
-     * @param Patient $patient Запис, який треба змінити
-     * @return \Illuminate\Http\RedirectResponse
+     * @param string $id Ідентифікатор запису
+     * @return JsonResponse
      */
-    public function update(Request $request, Patient $patient)
+    public function deletePatientById(string $id): JsonResponse
     {
-        $patient->update($this->validated($request));
+        $patient = Patient::find($id);
+        if (!$patient) {
+            return response()->json(['error' => 'Пацієнта не знайдено'], Response::HTTP_NOT_FOUND);
+        }
 
-        return redirect()->route('patients.index');
-    }
-
-    /**
-     * Видаляє пацієнта, якщо з ним не пов'язані інші записи.
-     *
-     * @param Patient $patient Запис, який треба видалити
-     * @return \Illuminate\Http\RedirectResponse
-     */
-    public function destroy(Patient $patient)
-    {
         try {
             $patient->delete();
         } catch (QueryException) {
-            return redirect()->route('patients.index')
-                ->with('error', 'Запис не можна видалити, бо з ним пов\'язані інші записи.');
+            return response()->json(['error' => 'Запис не можна видалити, бо з ним пов\'язані інші записи'], Response::HTTP_CONFLICT);
         }
 
-        return redirect()->route('patients.index');
+        return response()->json(null, Response::HTTP_NO_CONTENT);
     }
 
     /**
-     * Перевіряє дані форми за правилами.
+     * Перевіряє дані з JSON. Для нового запису обов'язкові всі поля, для оновлення перевіряються лише передані.
      *
-     * @param Request $request Дані, надіслані з форми
-     * @return array Перевірені дані
+     * @param array $data Дані з JSON
+     * @param bool $isNew true, якщо створюється новий запис
+     * @param Patient|null $patient Наявний запис (для оновлення)
+     * @return array Помилки у форматі [поле => [повідомлення]]
      */
-    private function validated(Request $request): array
+    private function validateData(array $data, bool $isNew, ?Patient $patient = null): array
     {
-        return $request->validate([
-            'first_name' => ['required', 'string', 'max:100'],
-            'last_name' => ['required', 'string', 'max:100'],
-            'birth_date' => ['required', 'date', 'before_or_equal:today'],
-            'phone' => ['required', 'string', 'max:20'],
+        $r = $isNew ? 'required|' : 'sometimes|required|';
+
+        $validator = Validator::make($data, [
+            'first_name' => $r.'string|max:100',
+            'last_name' => $r.'string|max:100',
+            'birth_date' => $r.'date_format:Y-m-d|before_or_equal:today',
+            'phone' => $r.'string|max:20',
         ]);
+
+        return $validator->errors()->toArray();
     }
 }

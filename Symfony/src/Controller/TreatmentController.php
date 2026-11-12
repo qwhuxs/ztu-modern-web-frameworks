@@ -7,162 +7,202 @@ use App\Entity\Treatment;
 use Doctrine\DBAL\Exception\ForeignKeyConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
-#[Route('/treatments')]
+#[Route('/api/treatments')]
 class TreatmentController extends AbstractController
 {
     /**
-     * Отримує менеджер сутностей для роботи з базою.
+     * Менеджер сутностей Doctrine для роботи з базою даних.
+     *
+     * @var EntityManagerInterface
+     */
+    private EntityManagerInterface $em;
+
+    /**
+     * Отримує менеджер сутностей.
      *
      * @param EntityManagerInterface $em Менеджер сутностей Doctrine
      */
-    public function __construct(private EntityManagerInterface $em)
+    public function __construct(EntityManagerInterface $em)
     {
+        $this->em = $em;
     }
 
     /**
-     * Показує список записів про лікування.
+     * READ: повертає список записів про лікування.
+     * Кожен об'єкт перетворюється на масив методом jsonSerialize() сутності.
      *
-     * @return Response
+     * @return JsonResponse
      */
-    #[Route('', name: 'treatment_index', methods: ['GET'])]
-    public function index(): Response
+    #[Route('', name: 'treatment_list', methods: [Request::METHOD_GET])]
+    public function getTreatments(): JsonResponse
     {
-        return $this->render('medical/treatments/index.html.twig', [
-            'treatments' => $this->em->getRepository(Treatment::class)->findBy([], ['id' => 'DESC']),
-        ]);
+        $items = $this->em->getRepository(Treatment::class)->findBy([], ['id' => 'DESC']);
+
+        return $this->json($items, Response::HTTP_OK);
     }
 
     /**
-     * Показує порожню форму та зберігає новий запис про лікування.
-     *
-     * @param Request $request Поточний запит
-     * @return Response
-     */
-    #[Route('/new', name: 'treatment_new', methods: ['GET', 'POST'])]
-    public function new(Request $request): Response
-    {
-        return $this->handleForm(new Treatment(), $request);
-    }
-
-    /**
-     * Показує заповнену форму та зберігає зміни запису про лікування.
+     * READ: повертає один запис за id.
      *
      * @param int $id Ідентифікатор запису
-     * @param Request $request Поточний запит
-     * @return Response
+     * @return JsonResponse
      */
-    #[Route('/{id}/edit', name: 'treatment_edit', requirements: ['id' => '\d+'], methods: ['GET', 'POST'])]
-    public function edit(int $id, Request $request): Response
+    #[Route('/{id}', name: 'treatment_show', requirements: ['id' => '\d+'], methods: [Request::METHOD_GET])]
+    public function getTreatmentById(int $id): JsonResponse
     {
-        return $this->handleForm($this->findOr404($id), $request);
-    }
-
-    /**
-     * Видаляє запис про лікування, якщо з ним не пов'язані інші записи.
-     *
-     * @param int $id Ідентифікатор запису
-     * @return Response
-     */
-    #[Route('/{id}/delete', name: 'treatment_delete', requirements: ['id' => '\d+'], methods: ['POST'])]
-    public function delete(int $id): Response
-    {
-        $this->em->remove($this->findOr404($id));
-
-        try {
-            $this->em->flush();
-        } catch (ForeignKeyConstraintViolationException) {
-            return $this->redirectToRoute('treatment_index', ['error' => 1]);
+        $treatment = $this->em->find(Treatment::class, $id);
+        if (!$treatment) {
+            return $this->json(['error' => 'Запис про лікування не знайдено'], Response::HTTP_NOT_FOUND);
         }
 
-        return $this->redirectToRoute('treatment_index');
+        return $this->json($treatment, Response::HTTP_OK);
     }
 
     /**
-     * Показує форму, а після надсилання перевіряє та зберігає дані.
+     * CREATE: створює новий запис із JSON-даних запиту.
      *
-     * @param Treatment $treatment Новий або наявний запис
-     * @param Request $request Поточний запит
-     * @return Response
+     * @param Request $request Запит із JSON-тілом
+     * @return JsonResponse
      */
-    private function handleForm(Treatment $treatment, Request $request): Response
+    #[Route('', name: 'treatment_create', methods: [Request::METHOD_POST])]
+    public function createTreatment(Request $request): JsonResponse
+    {
+        $treatment = new Treatment();
+        $errors = $this->fill($treatment, $this->getJsonData($request), true);
+
+        if ($errors) {
+            return $this->json(['errors' => $errors], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $this->em->persist($treatment);
+        $this->em->flush();
+
+        return $this->json($treatment, Response::HTTP_CREATED);
+    }
+
+    /**
+     * UPDATE: змінює лише ті поля, які передано в JSON.
+     *
+     * @param int $id Ідентифікатор запису
+     * @param Request $request Запит із JSON-тілом
+     * @return JsonResponse
+     */
+    #[Route('/{id}', name: 'treatment_update', requirements: ['id' => '\d+'], methods: [Request::METHOD_PATCH])]
+    public function updateTreatmentById(int $id, Request $request): JsonResponse
+    {
+        $treatment = $this->em->find(Treatment::class, $id);
+        if (!$treatment) {
+            return $this->json(['error' => 'Запис про лікування не знайдено'], Response::HTTP_NOT_FOUND);
+        }
+
+        $errors = $this->fill($treatment, $this->getJsonData($request), false);
+
+        if ($errors) {
+            return $this->json(['errors' => $errors], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $this->em->flush();
+
+        return $this->json($treatment, Response::HTTP_OK);
+    }
+
+    /**
+     * DELETE: видаляє запис і повертає 204 No Content.
+     * Якщо з записом пов'язані інші дані, повертає 409 Conflict.
+     *
+     * @param int $id Ідентифікатор запису
+     * @return JsonResponse
+     */
+    #[Route('/{id}', name: 'treatment_delete', requirements: ['id' => '\d+'], methods: [Request::METHOD_DELETE])]
+    public function deleteTreatmentById(int $id): JsonResponse
+    {
+        $treatment = $this->em->find(Treatment::class, $id);
+        if (!$treatment) {
+            return $this->json(['error' => 'Запис про лікування не знайдено'], Response::HTTP_NOT_FOUND);
+        }
+
+        try {
+            $this->em->remove($treatment);
+            $this->em->flush();
+        } catch (ForeignKeyConstraintViolationException) {
+            return $this->json(['error' => 'Запис не можна видалити, бо з ним пов\'язані інші записи'], Response::HTTP_CONFLICT);
+        }
+
+        return $this->json(null, Response::HTTP_NO_CONTENT);
+    }
+
+    /**
+     * Читає JSON-тіло запиту як масив.
+     *
+     * @param Request $request Поточний запит
+     * @return array
+     */
+    private function getJsonData(Request $request): array
+    {
+        $data = json_decode($request->getContent(), true);
+
+        return is_array($data) ? $data : [];
+    }
+
+    /**
+     * Переносить дані з JSON в об'єкт і повертає помилки перевірки.
+     * Для нового запису всі обов'язкові поля потрібні, для оновлення перевіряються лише передані.
+     *
+     * @param Treatment $treatment Запис, який треба заповнити
+     * @param array $data Дані з JSON
+     * @param bool $isNew true, якщо створюється новий запис
+     * @return array Помилки у форматі [поле => повідомлення]
+     */
+    private function fill(Treatment $treatment, array $data, bool $isNew): array
     {
         $errors = [];
 
-        if ($request->isMethod('POST')) {
-            $errors = $this->fill($treatment, $request);
-
-            if (!$errors) {
-                $this->em->persist($treatment);
-                $this->em->flush();
-
-                return $this->redirectToRoute('treatment_index');
+        if ($isNew || array_key_exists('diagnosis_id', $data)) {
+            $related = $this->em->find(Diagnosis::class, (int) ($data['diagnosis_id'] ?? 0));
+            if (!$related) {
+                $errors['diagnosis_id'] = 'Запис «Діагноз» з таким id не знайдено.';
+            } else {
+                $treatment->setDiagnosis($related);
+            }
+        }
+        if ($isNew || array_key_exists('prescription', $data)) {
+            $value = trim((string) ($data['prescription'] ?? ''));
+            if ($value === '') {
+                $errors['prescription'] = 'Поле «Призначення» обов\'язкове.';
+            } else {
+                $treatment->setPrescription($value);
+            }
+        }
+        if ($isNew || array_key_exists('start_date', $data)) {
+            $value = \DateTimeImmutable::createFromFormat('!Y-m-d', (string) ($data['start_date'] ?? ''));
+            if (!$value) {
+                $errors['start_date'] = 'Поле «Дата початку» має бути у форматі РРРР-ММ-ДД.';
+            } else {
+                $treatment->setStartDate($value);
+            }
+        }
+        if ($isNew || array_key_exists('end_date', $data)) {
+            $text = (string) ($data['end_date'] ?? '');
+            $value = $text === '' ? null : \DateTimeImmutable::createFromFormat('!Y-m-d', $text);
+            if ($value === false) {
+                $errors['end_date'] = 'Поле «Дата завершення» має бути у форматі РРРР-ММ-ДД або порожнім.';
+            } else {
+                $treatment->setEndDate($value);
             }
         }
 
-        return $this->render('medical/treatments/form.html.twig', [
-            'treatment' => $treatment,
-            'errors' => $errors,
-            'diagnoses' => $this->em->getRepository(Diagnosis::class)->findBy([], ['id' => 'DESC']),
-        ]);
-    }
-
-    /**
-     * Переносить дані з форми в об'єкт і збирає помилки.
-     *
-     * @param Treatment $treatment Запис, який треба заповнити
-     * @param Request $request Поточний запит
-     * @return array Список помилок
-     */
-    private function fill(Treatment $treatment, Request $request): array
-    {
-        $errors = [];
-
-        $diagnosis = $this->em->find(Diagnosis::class, (int) $request->request->get('diagnosis_id'));
-        if (!$diagnosis) {
-            $errors[] = 'Виберіть діагноз.';
-        } else {
-            $treatment->setDiagnosis($diagnosis);
-        }
-
-        $prescription = trim((string) $request->request->get('prescription'));
-        if ($prescription === '') {
-            $errors[] = 'Заповніть поле «Призначення».';
-        } else {
-            $treatment->setPrescription($prescription);
-        }
-
-        $startDate = \DateTimeImmutable::createFromFormat('!Y-m-d', (string) $request->request->get('start_date'));
-        if (!$startDate) {
-            $errors[] = 'Вкажіть правильну дату початку.';
-        } else {
-            $treatment->setStartDate($startDate);
-        }
-
-        // Дата завершення необов'язкова, але не може бути раніше дати початку.
-        $endDateText = (string) $request->request->get('end_date');
-        $endDate = $endDateText === '' ? null : \DateTimeImmutable::createFromFormat('!Y-m-d', $endDateText);
-        if ($endDate === false || ($endDate && $startDate && $endDate < $startDate)) {
-            $errors[] = 'Дата завершення неправильна або раніша за дату початку.';
-        } else {
-            $treatment->setEndDate($endDate);
+        // Дата завершення не може бути раніше дати початку.
+        $start = $treatment->getStartDate();
+        $end = $treatment->getEndDate();
+        if ($start && $end && $end < $start) {
+            $errors['end_date'] = 'Дата завершення не може бути раніше дати початку.';
         }
 
         return $errors;
-    }
-
-    /**
-     * Шукає запис за id або показує сторінку 404.
-     *
-     * @param int $id Ідентифікатор запису
-     * @return Treatment
-     */
-    private function findOr404(int $id): Treatment
-    {
-        return $this->em->find(Treatment::class, $id)
-            ?? throw $this->createNotFoundException('Запис не знайдено.');
     }
 }

@@ -8,156 +8,190 @@ use App\Entity\Patient;
 use Doctrine\DBAL\Exception\ForeignKeyConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
-#[Route('/appointments')]
+#[Route('/api/appointments')]
 class AppointmentController extends AbstractController
 {
     /**
-     * Отримує менеджер сутностей для роботи з базою.
+     * Менеджер сутностей Doctrine для роботи з базою даних.
+     *
+     * @var EntityManagerInterface
+     */
+    private EntityManagerInterface $em;
+
+    /**
+     * Отримує менеджер сутностей.
      *
      * @param EntityManagerInterface $em Менеджер сутностей Doctrine
      */
-    public function __construct(private EntityManagerInterface $em)
+    public function __construct(EntityManagerInterface $em)
     {
+        $this->em = $em;
     }
 
     /**
-     * Показує список прийомів.
+     * READ: повертає список прийомів.
+     * Кожен об'єкт перетворюється на масив методом jsonSerialize() сутності.
      *
-     * @return Response
+     * @return JsonResponse
      */
-    #[Route('', name: 'appointment_index', methods: ['GET'])]
-    public function index(): Response
+    #[Route('', name: 'appointment_list', methods: [Request::METHOD_GET])]
+    public function getAppointments(): JsonResponse
     {
-        return $this->render('medical/appointments/index.html.twig', [
-            'appointments' => $this->em->getRepository(Appointment::class)->findBy([], ['appointmentAt' => 'DESC']),
-        ]);
+        $items = $this->em->getRepository(Appointment::class)->findBy([], ['appointmentAt' => 'DESC']);
+
+        return $this->json($items, Response::HTTP_OK);
     }
 
     /**
-     * Показує порожню форму та зберігає новий запис: прийом.
-     *
-     * @param Request $request Поточний запит
-     * @return Response
-     */
-    #[Route('/new', name: 'appointment_new', methods: ['GET', 'POST'])]
-    public function new(Request $request): Response
-    {
-        return $this->handleForm(new Appointment(), $request);
-    }
-
-    /**
-     * Показує заповнену форму та зберігає зміни: прийом.
+     * READ: повертає один запис за id.
      *
      * @param int $id Ідентифікатор запису
-     * @param Request $request Поточний запит
-     * @return Response
+     * @return JsonResponse
      */
-    #[Route('/{id}/edit', name: 'appointment_edit', requirements: ['id' => '\d+'], methods: ['GET', 'POST'])]
-    public function edit(int $id, Request $request): Response
+    #[Route('/{id}', name: 'appointment_show', requirements: ['id' => '\d+'], methods: [Request::METHOD_GET])]
+    public function getAppointmentById(int $id): JsonResponse
     {
-        return $this->handleForm($this->findOr404($id), $request);
+        $appointment = $this->em->find(Appointment::class, $id);
+        if (!$appointment) {
+            return $this->json(['error' => 'Прийом не знайдено'], Response::HTTP_NOT_FOUND);
+        }
+
+        return $this->json($appointment, Response::HTTP_OK);
     }
 
     /**
-     * Видаляє прийом, якщо з ним не пов'язані інші записи.
+     * CREATE: створює новий запис із JSON-даних запиту.
+     *
+     * @param Request $request Запит із JSON-тілом
+     * @return JsonResponse
+     */
+    #[Route('', name: 'appointment_create', methods: [Request::METHOD_POST])]
+    public function createAppointment(Request $request): JsonResponse
+    {
+        $appointment = new Appointment();
+        $errors = $this->fill($appointment, $this->getJsonData($request), true);
+
+        if ($errors) {
+            return $this->json(['errors' => $errors], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $this->em->persist($appointment);
+        $this->em->flush();
+
+        return $this->json($appointment, Response::HTTP_CREATED);
+    }
+
+    /**
+     * UPDATE: змінює лише ті поля, які передано в JSON.
      *
      * @param int $id Ідентифікатор запису
-     * @return Response
+     * @param Request $request Запит із JSON-тілом
+     * @return JsonResponse
      */
-    #[Route('/{id}/delete', name: 'appointment_delete', requirements: ['id' => '\d+'], methods: ['POST'])]
-    public function delete(int $id): Response
+    #[Route('/{id}', name: 'appointment_update', requirements: ['id' => '\d+'], methods: [Request::METHOD_PATCH])]
+    public function updateAppointmentById(int $id, Request $request): JsonResponse
     {
-        $this->em->remove($this->findOr404($id));
+        $appointment = $this->em->find(Appointment::class, $id);
+        if (!$appointment) {
+            return $this->json(['error' => 'Прийом не знайдено'], Response::HTTP_NOT_FOUND);
+        }
+
+        $errors = $this->fill($appointment, $this->getJsonData($request), false);
+
+        if ($errors) {
+            return $this->json(['errors' => $errors], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $this->em->flush();
+
+        return $this->json($appointment, Response::HTTP_OK);
+    }
+
+    /**
+     * DELETE: видаляє запис і повертає 204 No Content.
+     * Якщо з записом пов'язані інші дані, повертає 409 Conflict.
+     *
+     * @param int $id Ідентифікатор запису
+     * @return JsonResponse
+     */
+    #[Route('/{id}', name: 'appointment_delete', requirements: ['id' => '\d+'], methods: [Request::METHOD_DELETE])]
+    public function deleteAppointmentById(int $id): JsonResponse
+    {
+        $appointment = $this->em->find(Appointment::class, $id);
+        if (!$appointment) {
+            return $this->json(['error' => 'Прийом не знайдено'], Response::HTTP_NOT_FOUND);
+        }
 
         try {
+            $this->em->remove($appointment);
             $this->em->flush();
         } catch (ForeignKeyConstraintViolationException) {
-            return $this->redirectToRoute('appointment_index', ['error' => 1]);
+            return $this->json(['error' => 'Запис не можна видалити, бо з ним пов\'язані інші записи'], Response::HTTP_CONFLICT);
         }
 
-        return $this->redirectToRoute('appointment_index');
+        return $this->json(null, Response::HTTP_NO_CONTENT);
     }
 
     /**
-     * Показує форму, а після надсилання перевіряє та зберігає дані.
+     * Читає JSON-тіло запиту як масив.
      *
-     * @param Appointment $appointment Новий або наявний запис
      * @param Request $request Поточний запит
-     * @return Response
+     * @return array
      */
-    private function handleForm(Appointment $appointment, Request $request): Response
+    private function getJsonData(Request $request): array
     {
-        $errors = [];
+        $data = json_decode($request->getContent(), true);
 
-        if ($request->isMethod('POST')) {
-            $errors = $this->fill($appointment, $request);
-
-            if (!$errors) {
-                $this->em->persist($appointment);
-                $this->em->flush();
-
-                return $this->redirectToRoute('appointment_index');
-            }
-        }
-
-        return $this->render('medical/appointments/form.html.twig', [
-            'appointment' => $appointment,
-            'errors' => $errors,
-            'patients' => $this->em->getRepository(Patient::class)->findBy([], ['lastName' => 'ASC']),
-            'doctors' => $this->em->getRepository(Doctor::class)->findBy([], ['lastName' => 'ASC']),
-        ]);
+        return is_array($data) ? $data : [];
     }
 
     /**
-     * Переносить дані з форми в об'єкт і збирає помилки.
+     * Переносить дані з JSON в об'єкт і повертає помилки перевірки.
+     * Для нового запису всі обов'язкові поля потрібні, для оновлення перевіряються лише передані.
      *
      * @param Appointment $appointment Запис, який треба заповнити
-     * @param Request $request Поточний запит
-     * @return array Список помилок
+     * @param array $data Дані з JSON
+     * @param bool $isNew true, якщо створюється новий запис
+     * @return array Помилки у форматі [поле => повідомлення]
      */
-    private function fill(Appointment $appointment, Request $request): array
+    private function fill(Appointment $appointment, array $data, bool $isNew): array
     {
         $errors = [];
 
-        $patient = $this->em->find(Patient::class, (int) $request->request->get('patient_id'));
-        if (!$patient) {
-            $errors[] = 'Виберіть пацієнта.';
-        } else {
-            $appointment->setPatient($patient);
+        if ($isNew || array_key_exists('patient_id', $data)) {
+            $related = $this->em->find(Patient::class, (int) ($data['patient_id'] ?? 0));
+            if (!$related) {
+                $errors['patient_id'] = 'Запис «Пацієнт» з таким id не знайдено.';
+            } else {
+                $appointment->setPatient($related);
+            }
         }
-
-        $doctor = $this->em->find(Doctor::class, (int) $request->request->get('doctor_id'));
-        if (!$doctor) {
-            $errors[] = 'Виберіть лікаря.';
-        } else {
-            $appointment->setDoctor($doctor);
+        if ($isNew || array_key_exists('doctor_id', $data)) {
+            $related = $this->em->find(Doctor::class, (int) ($data['doctor_id'] ?? 0));
+            if (!$related) {
+                $errors['doctor_id'] = 'Запис «Лікар» з таким id не знайдено.';
+            } else {
+                $appointment->setDoctor($related);
+            }
         }
-
-        $appointmentAt = \DateTimeImmutable::createFromFormat('!Y-m-d\TH:i', (string) $request->request->get('appointment_at'));
-        if (!$appointmentAt) {
-            $errors[] = 'Вкажіть правильну дату і час прийому.';
-        } else {
-            $appointment->setAppointmentAt($appointmentAt);
+        if ($isNew || array_key_exists('appointment_at', $data)) {
+            $value = \DateTimeImmutable::createFromFormat('!Y-m-d H:i', (string) ($data['appointment_at'] ?? ''));
+            if (!$value) {
+                $errors['appointment_at'] = 'Поле «Дата і час прийому» має бути у форматі РРРР-ММ-ДД ГГ:ХХ.';
+            } else {
+                $appointment->setAppointmentAt($value);
+            }
         }
-
-        $appointment->setComplaints(trim((string) $request->request->get('complaints')) ?: null);
+        if ($isNew || array_key_exists('complaints', $data)) {
+            $value = trim((string) ($data['complaints'] ?? ''));
+            $appointment->setComplaints($value === '' ? null : $value);
+        }
 
         return $errors;
-    }
-
-    /**
-     * Шукає запис за id або показує сторінку 404.
-     *
-     * @param int $id Ідентифікатор запису
-     * @return Appointment
-     */
-    private function findOr404(int $id): Appointment
-    {
-        return $this->em->find(Appointment::class, $id)
-            ?? throw $this->createNotFoundException('Запис не знайдено.');
     }
 }

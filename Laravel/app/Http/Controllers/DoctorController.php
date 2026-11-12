@@ -4,99 +4,126 @@ namespace App\Http\Controllers;
 
 use App\Models\Doctor;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+use Symfony\Component\HttpFoundation\Response;
 
 class DoctorController extends Controller
 {
     /**
-     * Показує список лікарів.
+     * READ: повертає список лікарів.
+     * Кожна модель перетворюється на масив методом jsonSerialize().
      *
-     * @return \Illuminate\Contracts\View\View
+     * @return JsonResponse
      */
-    public function index()
+    public function getDoctors(): JsonResponse
     {
-        return view('medical.doctors.index', ['doctors' => Doctor::orderBy('last_name')->get()]);
+        return response()->json(Doctor::query()->orderBy('last_name')->get(), Response::HTTP_OK);
     }
 
     /**
-     * Показує порожню форму, щоб додати лікаря.
+     * READ: повертає один запис за id.
      *
-     * @return \Illuminate\Contracts\View\View
+     * @param string $id Ідентифікатор запису
+     * @return JsonResponse
      */
-    public function create()
+    public function getDoctorById(string $id): JsonResponse
     {
-        return view('medical.doctors.form', ['doctor' => new Doctor()]);
+        $doctor = Doctor::query()->find($id);
+        if (!$doctor) {
+            return response()->json(['error' => 'Лікаря не знайдено'], Response::HTTP_NOT_FOUND);
+        }
+
+        return response()->json($doctor, Response::HTTP_OK);
     }
 
     /**
-     * Перевіряє дані форми та зберігає нового лікаря у базі.
+     * CREATE: створює новий запис із JSON-даних запиту.
      *
-     * @param Request $request Дані, надіслані з форми
-     * @return \Illuminate\Http\RedirectResponse
+     * @param Request $request Запит із JSON-тілом
+     * @return JsonResponse
      */
-    public function store(Request $request)
+    public function createDoctor(Request $request): JsonResponse
     {
-        Doctor::create($this->validated($request));
+        $data = $request->json()->all();
+        $errors = $this->validateData($data, true);
+        if ($errors) {
+            return response()->json(['errors' => $errors], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
 
-        return redirect()->route('doctors.index');
+        $doctor = Doctor::create($data);
+
+        return response()->json($doctor->fresh(), Response::HTTP_CREATED);
     }
 
     /**
-     * Показує заповнену форму, щоб змінити лікаря.
+     * UPDATE: змінює лише ті поля, які передано в JSON.
      *
-     * @param Doctor $doctor Запис, знайдений за id з адреси
-     * @return \Illuminate\Contracts\View\View
+     * @param string $id Ідентифікатор запису
+     * @param Request $request Запит із JSON-тілом
+     * @return JsonResponse
      */
-    public function edit(Doctor $doctor)
+    public function updateDoctorById(string $id, Request $request): JsonResponse
     {
-        return view('medical.doctors.form', ['doctor' => $doctor]);
+        $doctor = Doctor::find($id);
+        if (!$doctor) {
+            return response()->json(['error' => 'Лікаря не знайдено'], Response::HTTP_NOT_FOUND);
+        }
+
+        $data = $request->json()->all();
+        $errors = $this->validateData($data, false, $doctor);
+        if ($errors) {
+            return response()->json(['errors' => $errors], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $doctor->update($data);
+
+        return response()->json($doctor->fresh(), Response::HTTP_OK);
     }
 
     /**
-     * Перевіряє дані форми та зберігає зміни.
+     * DELETE: видаляє запис і повертає 204 No Content.
+     * Якщо з записом пов'язані інші дані, повертає 409 Conflict.
      *
-     * @param Request $request Дані, надіслані з форми
-     * @param Doctor $doctor Запис, який треба змінити
-     * @return \Illuminate\Http\RedirectResponse
+     * @param string $id Ідентифікатор запису
+     * @return JsonResponse
      */
-    public function update(Request $request, Doctor $doctor)
+    public function deleteDoctorById(string $id): JsonResponse
     {
-        $doctor->update($this->validated($request));
+        $doctor = Doctor::find($id);
+        if (!$doctor) {
+            return response()->json(['error' => 'Лікаря не знайдено'], Response::HTTP_NOT_FOUND);
+        }
 
-        return redirect()->route('doctors.index');
-    }
-
-    /**
-     * Видаляє лікаря, якщо з ним не пов'язані інші записи.
-     *
-     * @param Doctor $doctor Запис, який треба видалити
-     * @return \Illuminate\Http\RedirectResponse
-     */
-    public function destroy(Doctor $doctor)
-    {
         try {
             $doctor->delete();
         } catch (QueryException) {
-            return redirect()->route('doctors.index')
-                ->with('error', 'Запис не можна видалити, бо з ним пов\'язані інші записи.');
+            return response()->json(['error' => 'Запис не можна видалити, бо з ним пов\'язані інші записи'], Response::HTTP_CONFLICT);
         }
 
-        return redirect()->route('doctors.index');
+        return response()->json(null, Response::HTTP_NO_CONTENT);
     }
 
     /**
-     * Перевіряє дані форми за правилами.
+     * Перевіряє дані з JSON. Для нового запису обов'язкові всі поля, для оновлення перевіряються лише передані.
      *
-     * @param Request $request Дані, надіслані з форми
-     * @return array Перевірені дані
+     * @param array $data Дані з JSON
+     * @param bool $isNew true, якщо створюється новий запис
+     * @param Doctor|null $doctor Наявний запис (для оновлення)
+     * @return array Помилки у форматі [поле => [повідомлення]]
      */
-    private function validated(Request $request): array
+    private function validateData(array $data, bool $isNew, ?Doctor $doctor = null): array
     {
-        return $request->validate([
-            'first_name' => ['required', 'string', 'max:100'],
-            'last_name' => ['required', 'string', 'max:100'],
-            'specialty' => ['required', 'string', 'max:100'],
-            'phone' => ['required', 'string', 'max:20'],
+        $r = $isNew ? 'required|' : 'sometimes|required|';
+
+        $validator = Validator::make($data, [
+            'first_name' => $r.'string|max:100',
+            'last_name' => $r.'string|max:100',
+            'specialty' => $r.'string|max:100',
+            'phone' => $r.'string|max:20',
         ]);
+
+        return $validator->errors()->toArray();
     }
 }

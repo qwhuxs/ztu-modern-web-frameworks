@@ -3,15 +3,17 @@
 namespace App\Controller;
 
 use App\Entity\User;
-use App\Security\JwtService;
-use App\Security\RequireRole;
 use Doctrine\ORM\EntityManagerInterface;
+use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\Cookie;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
 class AuthController extends AbstractController
 {
@@ -19,14 +21,20 @@ class AuthController extends AbstractController
      * Отримує сервіси для роботи з користувачами й токенами.
      *
      * @param EntityManagerInterface $em Менеджер сутностей Doctrine
-     * @param JwtService $jwt Сервіс JWT
+     * @param JWTTokenManagerInterface $jwtManager Сервіс lexik, який створює й підписує JWT
+     * @param UserPasswordHasherInterface $hasher Сервіс хешування паролів Symfony Security
+     * @param int $tokenTtl Час життя токена в секундах (token_ttl з lexik_jwt_authentication.yaml)
      */
-    public function __construct(private EntityManagerInterface $em, private JwtService $jwt)
-    {
+    public function __construct(
+        private EntityManagerInterface $em,
+        private JWTTokenManagerInterface $jwtManager,
+        private UserPasswordHasherInterface $hasher,
+        #[Autowire('%lexik_jwt_authentication.token_ttl%')] private int $tokenTtl,
+    ) {
     }
 
     /**
-     * Показує форму входу, а після надсилання перевіряє пароль і зберігає JWT у cookie.
+     * Показує форму входу, а після надсилання перевіряє пароль, створює JWT через lexik і зберігає його в cookie.
      *
      * @param Request $request Поточний запит
      * @return Response
@@ -40,7 +48,7 @@ class AuthController extends AbstractController
         if ($request->isMethod('POST')) {
             $user = $this->findUser($email);
 
-            if ($user && $user->checkPassword((string) $request->request->get('password'))) {
+            if ($user && $this->hasher->isPasswordValid($user, (string) $request->request->get('password'))) {
                 return $this->withTokenCookie($this->redirectToRoute('medical_home'), $user, $request);
             }
 
@@ -84,7 +92,7 @@ class AuthController extends AbstractController
                 $user = new User();
                 $user->setName($name);
                 $user->setEmail($email);
-                $user->setPlainPassword($password);
+                $user->setPassword($this->hasher->hashPassword($user, $password));
                 $this->em->persist($user);
                 $this->em->flush();
 
@@ -110,45 +118,16 @@ class AuthController extends AbstractController
     }
 
     /**
-     * API: перевіряє пошту й пароль і повертає JWT у форматі JSON.
-     *
-     * @param Request $request JSON з полями email і password
-     * @return JsonResponse
-     */
-    #[Route('/api/login', name: 'api_login', methods: ['POST'])]
-    public function apiLogin(Request $request): JsonResponse
-    {
-        try {
-            $data = $request->toArray();
-        } catch (\Throwable) {
-            $data = $request->request->all();
-        }
-
-        $user = $this->findUser((string) ($data['email'] ?? ''));
-
-        if (!$user || !$user->checkPassword((string) ($data['password'] ?? ''))) {
-            return $this->json(['message' => 'Неправильна пошта або пароль.'], 401);
-        }
-
-        return $this->json([
-            'token' => $this->jwt->createToken($user),
-            'token_type' => 'Bearer',
-            'expires_in' => JwtService::TTL,
-            'user' => $user->toArray(),
-        ]);
-    }
-
-    /**
      * API: повертає дані користувача, якому належить токен.
+     * Сам вхід через API (POST /api/login) виконує json_login із security.yaml, контролер для нього не потрібен.
      *
-     * @param Request $request Запит із заголовком Authorization: Bearer
+     * @param User $user Поточний користувач, визначений за JWT
      * @return JsonResponse
      */
-    #[RequireRole('client')]
     #[Route('/api/me', name: 'api_me', methods: ['GET'])]
-    public function me(Request $request): JsonResponse
+    public function me(#[CurrentUser] User $user): JsonResponse
     {
-        return $this->json($request->attributes->get('user')->toArray());
+        return $this->json($user->toArray());
     }
 
     /**
@@ -172,11 +151,10 @@ class AuthController extends AbstractController
      */
     private function withTokenCookie(Response $response, User $user, Request $request): Response
     {
-        // HttpOnly: JavaScript не може прочитати токен; SameSite=Lax захищає від запитів з інших сайтів.
         $response->headers->setCookie(Cookie::create(
             'jwt',
-            $this->jwt->createToken($user),
-            time() + JwtService::TTL,
+            $this->jwtManager->create($user),
+            time() + $this->tokenTtl,
             '/',
             null,
             $request->isSecure(),

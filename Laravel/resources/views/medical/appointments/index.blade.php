@@ -44,7 +44,7 @@
     </form>
 
     <table>
-        <tr><th>ID</th><th>Дата і час</th><th>Пацієнт</th><th>Лікар</th><th>Скарги</th><th>Дії</th></tr>
+        <tr><th>ID</th><th>Дата і час</th><th>Пацієнт</th><th>Лікар</th><th>Скарги</th>@if (auth()->user()?->hasRole('manager'))<th>Дії</th>@endif</tr>
         @forelse ($appointments as $appointment)
             <tr>
                 <td>{{ $appointment->id }}</td>
@@ -52,7 +52,7 @@
                 <td>{{ $appointment->patient->last_name }} {{ $appointment->patient->first_name }}</td>
                 <td>{{ $appointment->doctor->last_name }} {{ $appointment->doctor->first_name }}</td>
                 <td>{{ $appointment->complaints }}</td>
-                <td class="actions">
+                <td class="actions" @if (!auth()->user()->hasRole('manager')) hidden @endif>
                     @if (auth()->user()->hasRole('manager'))
                         <a class="btn" href="{{ route('appointments.edit', $appointment) }}">Змінити</a>
                     @endif

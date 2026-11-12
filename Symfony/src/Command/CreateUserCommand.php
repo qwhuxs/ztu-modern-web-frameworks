@@ -10,6 +10,7 @@ use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 #[AsCommand(name: 'app:create-user', description: 'Створює користувача або оновлює пароль і роль наявного')]
 class CreateUserCommand extends Command
@@ -18,8 +19,9 @@ class CreateUserCommand extends Command
      * Отримує менеджер сутностей для роботи з базою.
      *
      * @param EntityManagerInterface $em Менеджер сутностей Doctrine
+     * @param UserPasswordHasherInterface $hasher Сервіс хешування паролів Symfony Security
      */
-    public function __construct(private EntityManagerInterface $em)
+    public function __construct(private EntityManagerInterface $em, private UserPasswordHasherInterface $hasher)
     {
         parent::__construct();
     }
@@ -49,7 +51,7 @@ class CreateUserCommand extends Command
     {
         $role = (string) $input->getArgument('role');
 
-        if (!array_key_exists($role, User::ROLE_LEVELS)) {
+        if (!in_array($role, User::ROLES, true)) {
             $output->writeln('<error>Роль має бути: client, manager або admin.</error>');
 
             return Command::FAILURE;
@@ -59,7 +61,7 @@ class CreateUserCommand extends Command
         $user = $this->em->getRepository(User::class)->findOneBy(['email' => $email]) ?? new User();
         $user->setEmail($email);
         $user->setName((string) $input->getOption('name'));
-        $user->setPlainPassword((string) $input->getArgument('password'));
+        $user->setPassword($this->hasher->hashPassword($user, (string) $input->getArgument('password')));
         $user->setRole($role);
 
         $this->em->persist($user);

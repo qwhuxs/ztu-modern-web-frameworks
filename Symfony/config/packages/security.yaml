@@ -1,0 +1,59 @@
+security:
+    password_hashers:
+        Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface: 'auto'
+
+    # Звідки брати користувачів: таблиця users, пошук за поштою.
+    providers:
+        app_user_provider:
+            entity:
+                class: App\Entity\User
+                property: email
+
+    firewalls:
+        dev:
+            pattern: ^/(_(profiler|wdt)|css|images|js)/
+            security: false
+
+        login:
+            pattern: ^/api/login
+            stateless: true
+            provider: app_user_provider
+            json_login:
+                check_path: api_login
+                username_path: email
+                password_path: password
+                success_handler: lexik_jwt_authentication.handler.authentication_success
+                failure_handler: lexik_jwt_authentication.handler.authentication_failure
+
+        main:
+            pattern: ^/
+            stateless: true
+            provider: app_user_provider
+            entry_point: jwt
+            jwt: ~
+            access_denied_handler: App\Security\AccessDeniedHandler
+
+    role_hierarchy:
+        ROLE_MANAGER: ROLE_CLIENT
+        ROLE_ADMIN: ROLE_MANAGER
+
+    access_control:
+        - { path: ^/api/login, roles: PUBLIC_ACCESS }
+        - { path: ^/api, roles: IS_AUTHENTICATED_FULLY }
+        - { path: ^/users, roles: ROLE_ADMIN }
+        # Create і Update: manager і admin
+        - { path: ^/(patients|doctors|appointments|diagnoses|treatments)/new, roles: ROLE_MANAGER }
+        - { path: ^/(patients|doctors|appointments|diagnoses|treatments)/\d+/edit, roles: ROLE_MANAGER }
+        # Delete: лише admin
+        - { path: ^/(patients|doctors|appointments|diagnoses|treatments)/\d+/delete, roles: ROLE_ADMIN }
+        # Read: усі ролі, але тільки після входу
+        - { path: ^/(patients|doctors|appointments|diagnoses|treatments), roles: ROLE_CLIENT }
+
+when@test:
+    security:
+        password_hashers:
+            Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface:
+                algorithm: auto
+                cost: 4
+                time_cost: 3
+                memory_cost: 10

@@ -3,21 +3,19 @@
 namespace App\Entity;
 
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
+use Symfony\Component\Security\Core\User\UserInterface;
 
 #[ORM\Entity]
 #[ORM\Table(name: 'users')]
-class User
+class User implements UserInterface, PasswordAuthenticatedUserInterface
 {
     public const ROLE_CLIENT = 'client';
     public const ROLE_MANAGER = 'manager';
     public const ROLE_ADMIN = 'admin';
 
-    /** Рівні доступу: що більше число, то більше прав. */
-    public const ROLE_LEVELS = [
-        self::ROLE_CLIENT => 1,
-        self::ROLE_MANAGER => 2,
-        self::ROLE_ADMIN => 3,
-    ];
+    /** Доступні ролі: client, manager, admin. */
+    public const ROLES = [self::ROLE_CLIENT, self::ROLE_MANAGER, self::ROLE_ADMIN];
 
     #[ORM\Id]
     #[ORM\GeneratedValue]
@@ -49,43 +47,60 @@ class User
     /** Встановлює пошту. */
     public function setEmail(string $email): void { $this->email = mb_strtolower(trim($email)); }
 
-    /** Повертає роль. */
+    /** Повертає роль: client, manager або admin. */
     public function getRole(): string { return $this->role; }
-    /** Встановлює роль. */
+    /** Встановлює роль: client, manager або admin. */
     public function setRole(string $role): void { $this->role = $role; }
 
     /**
-     * Зберігає пароль у вигляді хешу (сам пароль у базі не зберігається).
+     * Повертає роль у форматі Symfony Security, наприклад ROLE_ADMIN.
+     * Права нижчих ролей додає role_hierarchy з security.yaml.
      *
-     * @param string $plainPassword Пароль, який ввів користувач
+     * @return string[]
+     */
+    public function getRoles(): array
+    {
+        return ['ROLE_'.strtoupper($this->role)];
+    }
+
+    /**
+     * Повертає унікальний ідентифікатор користувача для Symfony Security (пошту).
+     *
+     * @return string
+     */
+    public function getUserIdentifier(): string
+    {
+        return (string) $this->email;
+    }
+
+    /**
+     * Повертає хеш пароля.
+     *
+     * @return string|null
+     */
+    public function getPassword(): ?string
+    {
+        return $this->password;
+    }
+
+    /**
+     * Зберігає хеш пароля, створений UserPasswordHasherInterface.
+     *
+     * @param string $hashedPassword Хеш пароля
      * @return void
      */
-    public function setPlainPassword(string $plainPassword): void
+    public function setPassword(string $hashedPassword): void
     {
-        $this->password = password_hash($plainPassword, PASSWORD_DEFAULT);
+        $this->password = $hashedPassword;
     }
 
     /**
-     * Перевіряє, чи збігається пароль із збереженим хешем.
+     * Очищає тимчасові секретні дані. Пароль у відкритому вигляді не зберігається, тому метод порожній.
      *
-     * @param string $plainPassword Пароль, який ввів користувач
-     * @return bool
+     * @return void
      */
-    public function checkPassword(string $plainPassword): bool
+    public function eraseCredentials(): void
     {
-        return $this->password !== null && password_verify($plainPassword, $this->password);
-    }
-
-    /**
-     * Перевіряє, чи має користувач указану роль або вищу.
-     * Наприклад, admin має всі права manager і client.
-     *
-     * @param string $role Мінімальна потрібна роль
-     * @return bool
-     */
-    public function hasRole(string $role): bool
-    {
-        return (self::ROLE_LEVELS[$this->role] ?? 0) >= (self::ROLE_LEVELS[$role] ?? PHP_INT_MAX);
     }
 
     /**

@@ -3,14 +3,14 @@
 namespace App\Controller;
 
 use App\Entity\User;
-use App\Security\RequireRole;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
-#[RequireRole('admin')]
+#[IsGranted('ROLE_ADMIN')]
 #[Route('/users')]
 class UserController extends AbstractController
 {
@@ -33,7 +33,7 @@ class UserController extends AbstractController
     {
         return $this->render('medical/users/index.html.twig', [
             'users' => $this->em->getRepository(User::class)->findBy([], ['id' => 'ASC']),
-            'roles' => array_keys(User::ROLE_LEVELS),
+            'roles' => User::ROLES,
         ]);
     }
 
@@ -50,11 +50,11 @@ class UserController extends AbstractController
         $user = $this->em->find(User::class, $id) ?? throw $this->createNotFoundException('Користувача не знайдено.');
         $role = (string) $request->request->get('role');
 
-        if ($user === $request->attributes->get('user')) {
+        if ($user === $this->getUser()) {
             return $this->redirectToRoute('user_index', ['error' => 'self']);
         }
 
-        if (array_key_exists($role, User::ROLE_LEVELS)) {
+        if (in_array($role, User::ROLES, true)) {
             $user->setRole($role);
             $this->em->flush();
         }

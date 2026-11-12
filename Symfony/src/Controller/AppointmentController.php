@@ -2,20 +2,19 @@
 
 namespace App\Controller;
 
+use App\Filter\FiltersRecords;
 use App\Entity\Appointment;
 use App\Entity\Doctor;
 use App\Entity\Patient;
-use App\Filter\FiltersRecords;
-use App\Security\RequireRole;
 use Doctrine\DBAL\Exception\ForeignKeyConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
-// Доступ: client переглядає, manager додає та змінює, admin видаляє.
-#[RequireRole('client')]
+#[IsGranted('ROLE_CLIENT')]
 #[Route('/appointments')]
 class AppointmentController extends AbstractController
 {
@@ -60,12 +59,12 @@ class AppointmentController extends AbstractController
     }
 
     /**
-     * Показує порожню форму та зберігає новий прийом.
+     * Показує порожню форму та зберігає новий запис: прийом.
      *
      * @param Request $request Поточний запит
      * @return Response
      */
-    #[RequireRole('manager')]
+    #[IsGranted('ROLE_MANAGER')]
     #[Route('/new', name: 'appointment_new', methods: ['GET', 'POST'])]
     public function new(Request $request): Response
     {
@@ -73,13 +72,13 @@ class AppointmentController extends AbstractController
     }
 
     /**
-     * Показує заповнену форму та зберігає зміни прийому.
+     * Показує заповнену форму та зберігає зміни: прийом.
      *
      * @param int $id Ідентифікатор запису
      * @param Request $request Поточний запит
      * @return Response
      */
-    #[RequireRole('manager')]
+    #[IsGranted('ROLE_MANAGER')]
     #[Route('/{id}/edit', name: 'appointment_edit', requirements: ['id' => '\d+'], methods: ['GET', 'POST'])]
     public function edit(int $id, Request $request): Response
     {
@@ -92,7 +91,7 @@ class AppointmentController extends AbstractController
      * @param int $id Ідентифікатор запису
      * @return Response
      */
-    #[RequireRole('admin')]
+    #[IsGranted('ROLE_ADMIN')]
     #[Route('/{id}/delete', name: 'appointment_delete', requirements: ['id' => '\d+'], methods: ['POST'])]
     public function delete(int $id): Response
     {
@@ -162,11 +161,7 @@ class AppointmentController extends AbstractController
             $appointment->setDoctor($doctor);
         }
 
-        $appointmentAt = \DateTimeImmutable::createFromFormat(
-            '!Y-m-d\TH:i',
-            (string) $request->request->get('appointment_at')
-        );
-
+        $appointmentAt = \DateTimeImmutable::createFromFormat('!Y-m-d\TH:i', (string) $request->request->get('appointment_at'));
         if (!$appointmentAt) {
             $errors[] = 'Вкажіть правильну дату і час прийому.';
         } else {

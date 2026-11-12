@@ -34,14 +34,14 @@
     </form>
 
     <table>
-        <tr><th>ID</th><th>Прізвище та ім'я</th><th>Спеціальність</th><th>Телефон</th><th>Дії</th></tr>
+        <tr><th>ID</th><th>Прізвище та ім'я</th><th>Спеціальність</th><th>Телефон</th>@if (auth()->user()?->hasRole('manager'))<th>Дії</th>@endif</tr>
         @forelse ($doctors as $doctor)
             <tr>
                 <td>{{ $doctor->id }}</td>
                 <td>{{ $doctor->last_name }} {{ $doctor->first_name }}</td>
                 <td>{{ $doctor->specialty }}</td>
                 <td>{{ $doctor->phone }}</td>
-                <td class="actions">
+                <td class="actions" @if (!auth()->user()->hasRole('manager')) hidden @endif>
                     @if (auth()->user()->hasRole('manager'))
                         <a class="btn" href="{{ route('doctors.edit', $doctor) }}">Змінити</a>
                     @endif

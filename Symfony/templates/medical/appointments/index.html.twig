@@ -3,9 +3,8 @@
 {% block title %}Прийоми{% endblock %}
 
 {% block content %}
-    {% set user = app.request.attributes.get('user') %}
     <h1>Прийоми</h1>
-    {% if user.hasRole('manager') %}
+    {% if is_granted('ROLE_MANAGER') %}
         <a class="btn" href="{{ path('appointment_new') }}">Додати прийом</a>
     {% endif %}
 
@@ -44,7 +43,7 @@
     </form>
 
     <table>
-        <tr><th>ID</th><th>Дата і час</th><th>Пацієнт</th><th>Лікар</th><th>Скарги</th><th>Дії</th></tr>
+        <tr><th>ID</th><th>Дата і час</th><th>Пацієнт</th><th>Лікар</th><th>Скарги</th>{% if is_granted('ROLE_MANAGER') %}{% if is_granted('ROLE_MANAGER') %}{% if is_granted('ROLE_MANAGER') %}{% if is_granted('ROLE_MANAGER') %}{% if is_granted('ROLE_MANAGER') %}<th>Дії</th>{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}</tr>
         {% for appointment in pagination.items %}
             <tr>
                 <td>{{ appointment.id }}</td>
@@ -52,11 +51,11 @@
                 <td>{{ appointment.patient.lastName }} {{ appointment.patient.firstName }}</td>
                 <td>{{ appointment.doctor.lastName }} {{ appointment.doctor.firstName }}</td>
                 <td>{{ appointment.complaints }}</td>
-                <td class="actions">
-                    {% if user.hasRole('manager') %}
+                <td class="actions" {% if not is_granted('ROLE_MANAGER') %}hidden{% endif %}>
+                    {% if is_granted('ROLE_MANAGER') %}
                         <a class="btn" href="{{ path('appointment_edit', {id: appointment.id}) }}">Змінити</a>
                     {% endif %}
-                    {% if user.hasRole('admin') %}
+                    {% if is_granted('ROLE_ADMIN') %}
                         <form method="post" action="{{ path('appointment_delete', {id: appointment.id}) }}">
                             <button class="btn btn-danger" type="submit">Видалити</button>
                         </form>

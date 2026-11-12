@@ -3,7 +3,6 @@
 {% block title %}Користувачі{% endblock %}
 
 {% block content %}
-    {% set current_user = app.request.attributes.get('user') %}
     <h1>Користувачі</h1>
 
     {% if app.request.query.get('error') == 'self' %}
@@ -18,7 +17,7 @@
                 <td>{{ user.name }}</td>
                 <td>{{ user.email }}</td>
                 <td>
-                    {% if user.id == current_user.id %}
+                    {% if user.id == app.user.id %}
                         {{ user.role }} (це ви)
                     {% else %}
                         <form method="post" action="{{ path('user_role', {id: user.id}) }}" class="actions">

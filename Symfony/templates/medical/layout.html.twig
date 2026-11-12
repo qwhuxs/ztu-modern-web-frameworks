@@ -15,7 +15,9 @@
         input, select, textarea { width: 100%; max-width: 500px; padding: 8px; margin-top: 4px; box-sizing: border-box; }
         .btn { display: inline-block; padding: 8px 14px; border: 0; border-radius: 4px; background: #1d4ed8; color: #fff; text-decoration: none; cursor: pointer; font-size: 14px; width: auto; }
         .btn-danger { background: #b42318; }
-        .actions { display: flex; gap: 8px; }
+        .actions { white-space: nowrap; }
+        .actions > * { display: inline-block; margin-right: 6px; vertical-align: middle; }
+        [hidden] { display: none !important; }
         .error { background: #fee4e2; color: #912018; padding: 10px 14px; border-radius: 4px; margin: 12px 0; }
         .filters { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; align-items: end; margin: 16px 0; padding: 14px; background: #f4f6f8; border-radius: 6px; }
         .filters label { margin-top: 0; }
@@ -37,13 +39,12 @@
         <a href="{{ path('appointment_index') }}">Прийоми</a>
         <a href="{{ path('diagnosis_index') }}">Діагнози</a>
         <a href="{{ path('treatment_index') }}">Лікування</a>
-        {% set current_user = app.request.attributes.get('user') %}
-        {% if current_user and current_user.hasRole('admin') %}
+        {% if is_granted('ROLE_ADMIN') %}
             <a href="{{ path('user_index') }}">Користувачі</a>
         {% endif %}
         <span class="user-box">
-            {% if current_user %}
-                {{ current_user.name }} ({{ current_user.role }})
+            {% if app.user %}
+                {{ app.user.name }} ({{ app.user.role }})
                 <form method="post" action="{{ path('logout') }}">
                     <button class="btn btn-light" type="submit">Вийти</button>
                 </form>
